@@ -1,0 +1,5 @@
+# Optional helpers for PDF text extraction and GPT GUI automation.
+# The app's one-click setup installs these only as needed.
+# Tkinter and system tools (browser, Pandoc, XeLaTeX, Codex CLI) are not pip packages.
+PyMuPDF>=1.24.3,<2
+playwright>=1.45,<2

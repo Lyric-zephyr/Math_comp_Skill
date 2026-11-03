@@ -1,0 +1,77 @@
+name: Source checks
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: source-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: ${{ matrix.os }} / Python ${{ matrix.python }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 5
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            python: "3.10"
+          - os: windows-latest
+            python: "3.14"
+          - os: ubuntu-latest
+            python: "3.14"
+    env:
+      PYTHONUTF8: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Check Python syntax and bundled JSON
+        shell: python
+        run: |
+          import json
+          from pathlib import Path
+
+          sources = [Path("main.py")]
+          for directory in ("adapters", "launcher", "skills/math-comp-prep/scripts"):
+              sources.extend(sorted(Path(directory).rglob("*.py")))
+          for path in sources:
+              compile(path.read_text(encoding="utf-8-sig"), str(path), "exec")
+          records = sorted(Path("skills/math-comp-prep/assets/open_problems").glob("*.json"))
+          for path in records:
+              json.loads(path.read_text(encoding="utf-8-sig"))
+          print(f"Checked {len(sources)} Python files and {len(records)} JSON files.")
+      - name: Check command-line entry points without AI calls
+        shell: python
+        run: |
+          import subprocess
+          import sys
+
+          scripts = (
+              "adapters/run_codex.py",
+              "adapters/run_dsh.py",
+              "adapters/run_doubao.py",
+              "adapters/pdf_export.py",
+              "skills/math-comp-prep/scripts/extract_pdf.py",
+              "skills/math-comp-prep/scripts/compile_latex.py",
+              "skills/math-comp-prep/scripts/scrape_cmathc.py",
+          )
+          for script in scripts:
+              result = subprocess.run(
+                  [sys.executable, "-B", script, "--help"],
+                  capture_output=True, text=True, encoding="utf-8", timeout=30,
+              )
+              if result.returncode:
+                  sys.exit(f"{script}:\n{result.stdout}\n{result.stderr}")
+              print(f"OK: {script} --help")

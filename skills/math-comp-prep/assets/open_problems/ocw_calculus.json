@@ -1,0 +1,83 @@
+{
+  "problems": [
+    {
+      "id": "OCW-18.01SC-F2010-final-2b",
+      "modules": [
+        "模块二：一元微分学"
+      ],
+      "problem": "证明隐式曲线 $xy^3+x^3y=4$ 没有水平切线。",
+      "solution": "隐式求导得 $y\\prime=-\\frac{y(y^2+3x^2)}{x(x^2+3y^2)}$；由原式知 $x,y$ 都非零，故导数存在且不为零。",
+      "source": "https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/93c7107d33490a892fdf426e5033062e_MIT18_01SCF10_final.pdf#page=2",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "attribution": "MIT OpenCourseWare, 18.01SC Single Variable Calculus, Fall 2010, Final Exam",
+      "changes": "中文翻译及解题摘要；未改变题目数据。仅作开放课程素材，不作为非数A压轴难度标杆。"
+    },
+    {
+      "id": "OCW-18.01SC-F2010-final-9",
+      "modules": [
+        "模块三：一元积分学"
+      ],
+      "problem": "计算不定积分 $\\int\\frac{x^2}{\\sqrt{9-x^2}}\\,dx$。",
+      "solution": "$\\frac92\\arcsin(x/3)-\\frac{x}{2}\\sqrt{9-x^2}+C$，在 $-3<x<3$ 上验证导数。",
+      "source": "https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/93c7107d33490a892fdf426e5033062e_MIT18_01SCF10_final.pdf#page=9",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "attribution": "MIT OpenCourseWare, 18.01SC Single Variable Calculus, Fall 2010, Final Exam",
+      "changes": "中文翻译及解题摘要；未改变题目数据。仅作开放课程素材，不作为非数A压轴难度标杆。"
+    },
+    {
+      "id": "OCW-18.01SC-F2010-final-10",
+      "modules": [
+        "模块三：一元积分学"
+      ],
+      "problem": "圆盘 $x^2+y^2\\le a^2$ 绕 $y$ 轴旋转得到球体，沿 $y$ 轴钻直径为 $a$ 的圆柱孔。求剩余体积（$a>0$）。",
+      "solution": "以 $y$ 为截面变量，在 $|y|\\le\\sqrt3 a/2$ 上积分 $\\pi(3a^2/4-y^2)$，得 $\\sqrt3\\pi a^3/2$。",
+      "source": "https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/93c7107d33490a892fdf426e5033062e_MIT18_01SCF10_final.pdf#page=10",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "attribution": "MIT OpenCourseWare, 18.01SC Single Variable Calculus, Fall 2010, Final Exam",
+      "changes": "中文翻译及解题摘要；未改变题目数据。仅作开放课程素材，不作为非数A压轴难度标杆。"
+    },
+    {
+      "id": "OCW-18.01SC-F2010-final-12",
+      "modules": [
+        "模块六：级数与方程"
+      ],
+      "problem": "镭-226 的质量衰减速率与当前质量成正比，初始质量为 $100$ 毫克，半衰期 $1600$ 年。用微分方程求 $t$ 年后的质量并估计 $1000$ 年后的质量。",
+      "solution": "$m(t)=100\\cdot2^{-t/1600}$ 毫克；$m(1000)\\approx65$ 毫克。",
+      "source": "https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/93c7107d33490a892fdf426e5033062e_MIT18_01SCF10_final.pdf#page=12",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "attribution": "MIT OpenCourseWare, 18.01SC Single Variable Calculus, Fall 2010, Final Exam",
+      "changes": "中文翻译及解题摘要；未改变题目数据。仅作开放课程素材，不作为非数A压轴难度标杆。"
+    },
+    {
+      "id": "OCW-18.01SC-F2010-final-13",
+      "modules": [
+        "模块三：一元积分学"
+      ],
+      "problem": "设 $x(t)=\\int_0^t\\cos(\\pi u^2/2)\\,du$，$y(t)=\\int_0^t\\sin(\\pi u^2/2)\\,du$，求 $0\\le t\\le t_0$ 的曲线弧长。",
+      "solution": "由变上限积分求导得到速率 $\\sqrt{\\cos^2(\\pi t^2/2)+\\sin^2(\\pi t^2/2)}=1$，弧长为 $t_0$。",
+      "source": "https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/93c7107d33490a892fdf426e5033062e_MIT18_01SCF10_final.pdf#page=13",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "attribution": "MIT OpenCourseWare, 18.01SC Single Variable Calculus, Fall 2010, Final Exam",
+      "changes": "中文翻译及解题摘要；未改变题目数据。仅作开放课程素材，不作为非数A压轴难度标杆。"
+    },
+    {
+      "id": "OCW-18.01SC-F2010-final-15",
+      "modules": [
+        "模块二：一元微分学",
+        "模块三：一元积分学"
+      ],
+      "problem": "证明或否证：对所有 $x>0$，$\\frac{x}{1+x^2}<\\arctan x<x$。",
+      "solution": "命题成立。可比较三个函数在零点的值和导数，或用 $\\arctan x=\\int_0^x\\frac{dt}{1+t^2}$ 直接估计。",
+      "source": "https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/93c7107d33490a892fdf426e5033062e_MIT18_01SCF10_final.pdf#page=16",
+      "license": "CC BY-NC-SA 4.0",
+      "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+      "attribution": "MIT OpenCourseWare, 18.01SC Single Variable Calculus, Fall 2010, Final Exam",
+      "changes": "中文翻译及解题摘要；未改变题目数据。仅作开放课程素材，不作为非数A压轴难度标杆。"
+    }
+  ]
+}

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-render-state="loading">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Math Competition Prep</title>
+<link rel="stylesheet" href="__ASSET_URL__/katex.min.css">
+<style>
+@page { size: A4; margin: 22mm 20mm; @bottom-right { content: counter(page); font-size: 10pt; } }
+* { box-sizing: border-box; }
+body { max-width: calc(170mm + 40px); margin: 24px auto; padding: 0 20px; background: white; color: black;
+  font: 14pt/1.7 "SimSun", "Songti SC", "Noto Serif CJK SC", serif; overflow-wrap: anywhere; }
+h1 { text-align: center; font-size: 18pt; }
+h2 { font-size: 16pt; }
+h3, h4, h5 { font-size: 14pt; font-weight: 700; margin: 1em 0 0.35em; }
+/* SimSun has no native bold face; reinforce strokes in Chromium PDF output. */
+strong { font-weight: 700; -webkit-text-stroke: 0.35px currentColor; }
+h1, h2, h3, h4, h5, h6 {
+  font-family: "SimHei", "Heiti SC", "Noto Sans CJK SC", sans-serif;
+  font-weight: 700; break-after: avoid; text-indent: 0;
+}
+#content p { text-indent: 2em; }
+#content.practice-paper h2 { text-align: center; }
+#content p.difficulty-label { text-indent: 0; }
+#content li p, #content th p, #content td p { text-indent: 0; }
+#content p:has(> .katex-display) { text-indent: 0; }
+p { orphans: 3; widows: 3; } a { color: black; }
+table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 1em 0; }
+th, td { border: 1px solid #888; padding: 5px 8px; text-align: left; }
+thead { display: table-header-group; } tr, .katex-display { break-inside: avoid; }
+pre { white-space: pre-wrap; font-size: 10pt; } img { max-width: 100%; }
+.katex { font-size: 1.05em; } .katex .fbox { border-color: #c62828 !important; }
+.katex-display { margin: 1em 0; max-width: 100%; }
+nav { margin-bottom: 2em; } nav li { margin: 3px 0; }
+.math-error { color: #b71c1c; border: 1px solid; padding: 4px; }
+@media print { body { width: 170mm; max-width: 100%; margin: 0; padding: 0; } nav { break-after: page; } }
+</style>
+<script src="__ASSET_URL__/katex.min.js"></script>
+<script src="__ASSET_URL__/marked.umd.js"></script>
+</head>
+<body>
+<header id="document-heading"></header>
+<nav id="toc" aria-label="目录"></nav>
+<main id="content"></main>
+<pre id="render-errors" hidden></pre>
+<script>
+const source = __MARKDOWN_SOURCE__;
+const documentTitle = __DOCUMENT_TITLE__;
+const errors = [];
+const escapeHtml = text => text.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+function math(text, displayMode) {
+  const offset = source.indexOf(text);
+  const location = offset < 0 ? "公式" : "Markdown 第 " + (source.slice(0, offset).split("\n").length) + " 行";
+  // Accept documents produced with the previous LaTeX red-box convention.
+  text = text.replace(/\\fcolorbox\s*\{red\}\s*\{white\}\s*\{\\\(([\s\S]*?)\\\)\}/g, (_, formula) => "\\boxed{" + formula + "}");
+  try { return katex.renderToString(text.trim(), {displayMode, throwOnError: true, strict: "ignore", trust: false}); }
+  catch (error) {
+    errors.push(location + "：" + text.trim() + "\n" + error.message);
+    return '<span class="math-error">' + escapeHtml(text) + '</span>';
+  }
+}
+async function render() {
+  try {
+    // Setext headings can consume an entire $$ block when a TeX equation has
+    // a line containing only '=' or '---'. Documents use explicit # headings.
+    marked.use({tokenizer: {lheading() {}}, renderer: {html(token) { return escapeHtml(token.text); }}, extensions: [
+      {name: "blockMath", level: "block",
+        start(text) { return text.search(/\$\$|\\\[/); },
+        tokenizer(text) {
+          const match = /^\$\$([\s\S]+?)\$\$[ \t]*(?:\n|$)/.exec(text) || /^\\\[([\s\S]+?)\\\][ \t]*(?:\n|$)/.exec(text);
+          if (match) return {type: "blockMath", raw: match[0], text: match[1]};
+        }, renderer(token) { return math(token.text, true) + "\n"; }},
+      {name: "inlineMath", level: "inline",
+        start(text) { return text.search(/\$|\\\(|\\\[|\\fcolorbox/); },
+        tokenizer(text) {
+          const display = /^\$\$([\s\S]+?)\$\$/.exec(text) || /^\\\[([\s\S]+?)\\\]/.exec(text);
+          if (display) return {type: "inlineMath", raw: display[0], text: display[1], display: true};
+          const inline = /^\$(?!\$)((?:\\.|[^$\\\n]|\n(?![ \t]*\n))+?)\$(?!\$)/.exec(text) || /^\\\(([\s\S]+?)\\\)/.exec(text);
+          if (inline) return {type: "inlineMath", raw: inline[0], text: inline[1], display: false};
+          const legacy = /^\\fcolorbox\s*\{red\}\s*\{white\}\s*\{\\\(([\s\S]*?)\\\)\}/.exec(text);
+          if (legacy) return {type: "inlineMath", raw: legacy[0], text: "\\boxed{" + legacy[1] + "}", display: true};
+        }, renderer(token) { return math(token.text, token.display); }}
+    ]});
+    document.title = documentTitle;
+    document.getElementById("content").innerHTML = marked.parse(source);
+    const title = document.querySelector("#content h1") || document.createElement("h1");
+    if (!title.textContent) title.textContent = documentTitle;
+    document.getElementById("document-heading").append(title);
+    const headings = [...document.querySelectorAll("#content h2")];
+    document.getElementById("content").classList.toggle("practice-paper",
+      headings.some(heading => /^(?:第\s*[12一二]\s*[组套]|(?:参考)?答案|详细解析)/.test(heading.textContent.trim())));
+    document.querySelectorAll("#content p").forEach(paragraph => {
+      if (/^【难度[：:].+】$/.test(paragraph.textContent.trim())) paragraph.classList.add("difficulty-label");
+    });
+    if (headings.length) {
+      const label = document.createElement("h2"); label.textContent = "目录";
+      const list = document.createElement("ul");
+      headings.forEach((heading, index) => {
+        heading.id = "heading-" + index;
+        const item = document.createElement("li"), link = document.createElement("a");
+        link.href = "#" + heading.id; link.textContent = heading.textContent;
+        item.append(link); list.append(item);
+      });
+      document.getElementById("toc").append(label, list);
+    } else document.getElementById("toc").remove();
+    await document.fonts.ready;
+    // 只缩放超宽公式，避免 Chromium 为容纳公式而缩小整页正文。
+    document.querySelectorAll("#content .katex").forEach(formula => {
+      const display = formula.parentElement.classList.contains("katex-display");
+      const available = Math.min(document.getElementById("content").clientWidth, 170 * 96 / 25.4) - (display ? 4 : 56);
+      const width = Math.max(formula.scrollWidth, formula.getBoundingClientRect().width);
+      if (width > available) formula.style.fontSize = (parseFloat(getComputedStyle(formula).fontSize) * available / width * 0.98) + "px";
+    });
+  } catch (error) { errors.push(error.message); }
+  document.getElementById("render-errors").textContent = errors.join("\n");
+  document.documentElement.dataset.renderState = errors.length ? "error" : "ready";
+}
+render();
+</script>
+</body>
+</html>

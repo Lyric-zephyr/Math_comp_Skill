@@ -1,0 +1,44 @@
+name: Bug report
+description: Report an application, export, setup, or math-rule problem.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        English or Chinese is welcome. Remove API keys, account details, private documents, and personal paths before posting.
+        For vulnerabilities, follow SECURITY.md instead of sharing details here.
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Operating system, Python version, and commit or download date.
+      placeholder: Windows 11, Python 3.13, commit ...
+    validations:
+      required: true
+  - type: input
+    id: configuration
+    attributes:
+      label: Configuration
+      description: AI service, running method, task/module, output format, and PDF engine if relevant. Do not include an API key.
+      placeholder: GPT / API / SUMMARY / module 1 / PDF / browser
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the smallest example that shows the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: For a math error, explain the expected result and why.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Sanitized log or screenshot
+      description: Include the relevant error message without secrets or copyrighted source documents.

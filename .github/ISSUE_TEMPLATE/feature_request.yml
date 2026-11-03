@@ -1,0 +1,25 @@
+name: Feature request
+description: Suggest an improvement to the interface, rules, or integrations.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: English or Chinese is welcome. Please check existing issues first.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem would this solve?
+      description: Describe the task and where the current behavior falls short.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested behavior
+      description: Explain what you would like to happen, with an example if helpful.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives or extra context
