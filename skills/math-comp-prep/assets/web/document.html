@@ -13,8 +13,8 @@ body { max-width: calc(170mm + 40px); margin: 24px auto; padding: 0 20px; backgr
 h1 { text-align: center; font-size: 18pt; }
 h2 { font-size: 16pt; }
 h3, h4, h5 { font-size: 14pt; font-weight: 700; margin: 1em 0 0.35em; }
-/* SimSun has no native bold face; reinforce strokes in Chromium PDF output. */
-strong { font-weight: 700; -webkit-text-stroke: 0.35px currentColor; }
+/* 使用字体加粗，避免描边让 PDF 复制或提取文字时出现重字。 */
+strong { font-weight: 700; }
 h1, h2, h3, h4, h5, h6 {
   font-family: "SimHei", "Heiti SC", "Noto Sans CJK SC", sans-serif;
   font-weight: 700; break-after: avoid; text-indent: 0;
@@ -23,14 +23,13 @@ h1, h2, h3, h4, h5, h6 {
 #content.practice-paper h2 { text-align: center; }
 #content p.difficulty-label { text-indent: 0; }
 #content li p, #content th p, #content td p { text-indent: 0; }
-#content p:has(> .katex-display) { text-indent: 0; }
 p { orphans: 3; widows: 3; } a { color: black; }
 table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 1em 0; }
 th, td { border: 1px solid #888; padding: 5px 8px; text-align: left; }
 thead { display: table-header-group; } tr, .katex-display { break-inside: avoid; }
 pre { white-space: pre-wrap; font-size: 10pt; } img { max-width: 100%; }
 .katex { font-size: 1.05em; } .katex .fbox { border-color: #c62828 !important; }
-.katex-display { margin: 1em 0; max-width: 100%; }
+.katex-display { margin: 1em 0; max-width: 100%; text-align: center; text-indent: 0; }
 nav { margin-bottom: 2em; } nav li { margin: 3px 0; }
 .math-error { color: #b71c1c; border: 1px solid; padding: 4px; }
 @media print { body { width: 170mm; max-width: 100%; margin: 0; padding: 0; } nav { break-after: page; } }
@@ -47,14 +46,17 @@ nav { margin-bottom: 2em; } nav li { margin: 3px 0; }
 const source = __MARKDOWN_SOURCE__;
 const documentTitle = __DOCUMENT_TITLE__;
 const errors = [];
+const invalidFormulas = [];
 const escapeHtml = text => text.replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 function math(text, displayMode) {
+  const original = text;
   const offset = source.indexOf(text);
   const location = offset < 0 ? "公式" : "Markdown 第 " + (source.slice(0, offset).split("\n").length) + " 行";
   // Accept documents produced with the previous LaTeX red-box convention.
   text = text.replace(/\\fcolorbox\s*\{red\}\s*\{white\}\s*\{\\\(([\s\S]*?)\\\)\}/g, (_, formula) => "\\boxed{" + formula + "}");
   try { return katex.renderToString(text.trim(), {displayMode, throwOnError: true, strict: "ignore", trust: false}); }
   catch (error) {
+    invalidFormulas.push(original);
     errors.push(location + "：" + text.trim() + "\n" + error.message);
     return '<span class="math-error">' + escapeHtml(text) + '</span>';
   }
@@ -67,7 +69,7 @@ async function render() {
       {name: "blockMath", level: "block",
         start(text) { return text.search(/\$\$|\\\[/); },
         tokenizer(text) {
-          const match = /^\$\$([\s\S]+?)\$\$[ \t]*(?:\n|$)/.exec(text) || /^\\\[([\s\S]+?)\\\][ \t]*(?:\n|$)/.exec(text);
+          const match = /^\$\$((?:(?!\$\$)[\s\S])+?)\$\$[ \t]*(?:\n|$)/.exec(text) || /^\\\[((?:(?!\\\])[\s\S])+?)\\\][ \t]*(?:\n|$)/.exec(text);
           if (match) return {type: "blockMath", raw: match[0], text: match[1]};
         }, renderer(token) { return math(token.text, true) + "\n"; }},
       {name: "inlineMath", level: "inline",
@@ -83,6 +85,21 @@ async function render() {
     ]});
     document.title = documentTitle;
     document.getElementById("content").innerHTML = marked.parse(source);
+    // 分开混排段落中的独立公式，保证公式前后的文字段落都缩进两个字符。
+    document.querySelectorAll("#content p:has(> .katex-display)").forEach(paragraph => {
+      const fragment = document.createDocumentFragment();
+      let text = document.createElement("p");
+      const flush = () => {
+        if (text.textContent.trim() || text.querySelector("img, .katex")) fragment.append(text);
+        text = document.createElement("p");
+      };
+      [...paragraph.childNodes].forEach(node => {
+        if (node.nodeType === Node.ELEMENT_NODE && node.classList.contains("katex-display")) {
+          flush(); fragment.append(node);
+        } else text.append(node);
+      });
+      flush(); paragraph.replaceWith(fragment);
+    });
     const title = document.querySelector("#content h1") || document.createElement("h1");
     if (!title.textContent) title.textContent = documentTitle;
     document.getElementById("document-heading").append(title);
@@ -113,6 +130,7 @@ async function render() {
     });
   } catch (error) { errors.push(error.message); }
   document.getElementById("render-errors").textContent = errors.join("\n");
+  document.getElementById("render-errors").dataset.formulas = JSON.stringify(invalidFormulas);
   document.documentElement.dataset.renderState = errors.length ? "error" : "ready";
 }
 render();

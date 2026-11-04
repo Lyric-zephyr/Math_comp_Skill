@@ -10,10 +10,10 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 if __package__:
-    from .pdf_export import WEB_ASSETS, check_environment, export_pdf
+    from .pdf_export import WEB_ASSETS, FormulaRenderError, check_environment, export_pdf, normalize_math_blanks
     from .tool_paths import find_tool, tool_environment
 else:
-    from pdf_export import WEB_ASSETS, check_environment, export_pdf
+    from pdf_export import WEB_ASSETS, FormulaRenderError, check_environment, export_pdf, normalize_math_blanks
     from tool_paths import find_tool, tool_environment
 
 
@@ -93,10 +93,11 @@ def _format_word(path, practice):
             style.insert(list(style).index(properties), paragraph)
         for paragraph in document.iter(tag("p")):
             text = "".join(item.text or "" for item in paragraph.iter(tag("t"))).strip()
-            if re.fullmatch(r"【难度[：:].+】", text):
+            display_math = not text and paragraph.find("{http://schemas.openxmlformats.org/officeDocument/2006/math}oMathPara") is not None
+            if display_math or re.fullmatch(r"【难度[：:].+】", text):
                 properties = element(paragraph, "pPr")
                 element(properties, "ind").set(tag("firstLine"), "0")
-                element(properties, "jc").set(tag("val"), "left")
+                element(properties, "jc").set(tag("val"), "center" if display_math else "left")
                 paragraph.remove(properties)
                 paragraph.insert(0, properties)
         replacements = {"word/styles.xml": ET.tostring(styles, encoding="utf-8", xml_declaration=True),
@@ -108,8 +109,12 @@ def _format_word(path, practice):
     formatted.replace(path)
 
 
-def save_document(content, filename_prefix, output_format="pdf", pdf_engine="browser"):
+def save_document(content, filename_prefix, output_format="pdf", pdf_engine="browser", repair=None):
     check_output_environment(output_format, pdf_engine)
+    normalized = normalize_math_blanks(content)
+    if normalized != content:
+        print("[!] 已自动修复公式中的填空横线，继续导出。", flush=True)
+    content = normalized
     prefix = Path(filename_prefix).expanduser().resolve()
     prefix.parent.mkdir(parents=True, exist_ok=True)
     extension = "docx" if output_format == "word" else output_format
@@ -118,25 +123,42 @@ def save_document(content, filename_prefix, output_format="pdf", pdf_engine="bro
         destination.write_text(content.rstrip() + "\n", encoding="utf-8")
         return destination
     try:
-        with tempfile.TemporaryDirectory(prefix=".document-export-", dir=prefix.parent, ignore_cleanup_errors=True) as work:
-            source = Path(work) / "document.md"
-            source.write_text(content.rstrip() + "\n", encoding="utf-8")
-            if output_format == "word":
-                pandoc = find_tool("pandoc")
-                result = source.with_suffix(".docx")
-                subprocess.run(
-                    [pandoc, str(source), "-o", str(result), "--from=markdown+tex_math_single_backslash",
-                     "--metadata", f"title={prefix.name}", "--toc", "--toc-depth=2"],
-                    check=True, timeout=180, env=tool_environment(pandoc), capture_output=True,
-                    text=True, encoding="utf-8", errors="replace",
-                    creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
-                )
-                _format_word(result, bool(re.search(r"(?m)^##[ \t]+" + PRACTICE_HEADING, content)))
-            else:
-                result = export_pdf(source, title=prefix.name, engine=pdf_engine, html_only=output_format == "html")
-                if output_format == "html":
-                    _standalone_html(result)
-            result.replace(destination)
+        for attempt in range(3):
+            try:
+                with tempfile.TemporaryDirectory(prefix=".document-export-", dir=prefix.parent, ignore_cleanup_errors=True) as work:
+                    source = Path(work) / "document.md"
+                    source.write_text(content.rstrip() + "\n", encoding="utf-8")
+                    if output_format == "word":
+                        pandoc = find_tool("pandoc")
+                        result = source.with_suffix(".docx")
+                        subprocess.run(
+                            [pandoc, str(source), "-o", str(result), "--from=markdown+tex_math_single_backslash",
+                             "--metadata", f"title={prefix.name}", "--toc", "--toc-depth=2"],
+                            check=True, timeout=180, env=tool_environment(pandoc), capture_output=True,
+                            text=True, encoding="utf-8", errors="replace",
+                            creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+                        )
+                        _format_word(result, bool(re.search(r"(?m)^##[ \t]+" + PRACTICE_HEADING, content)))
+                    else:
+                        result = export_pdf(source, title=prefix.name, engine=pdf_engine, html_only=output_format == "html")
+                        if output_format == "html":
+                            _standalone_html(result)
+                    result.replace(destination)
+                break
+            except FormulaRenderError as error:
+                if repair is None or attempt == 2:
+                    raise
+                print(f"[!] 公式排版失败，正在自动修复并重试 [{attempt + 1}/2]（仅修复报错公式，不重新生成正文）...", flush=True)
+                try:
+                    updated = normalize_math_blanks(repair(content, error))
+                except (ValueError, RuntimeError, subprocess.TimeoutExpired):
+                    if attempt == 1:
+                        raise
+                    print("[!] 本次公式修复未完成，将再试一次。", flush=True)
+                    continue
+                if updated == content:
+                    print("[!] 修复未改变报错公式，继续尝试。", flush=True)
+                content = updated
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         recovery = Path(f"{prefix}.md")
         recovery.write_text(content.rstrip() + "\n", encoding="utf-8")

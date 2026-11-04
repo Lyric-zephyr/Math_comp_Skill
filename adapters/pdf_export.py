@@ -21,6 +21,24 @@ ASSETS = Path(__file__).resolve().parent.parent / "skills" / "math-comp-prep" / 
 WEB_ASSETS = ASSETS / "web"
 
 
+class FormulaRenderError(RuntimeError):
+    def __init__(self, message, formulas):
+        super().__init__(message)
+        self.formulas = formulas
+
+
+def transform_math(content, transform):
+    """只处理数学片段，保留正文、行内代码及代码块。"""
+    pattern = (r"(?P<code>```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)"
+               r"|(?P<math>(?<!\\)\$\$[\s\S]+?(?<!\\)\$\$|(?<!\\)\$(?!\$)(?:\\.|[^$\\])+?(?<!\\)\$(?!\$)"
+               r"|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])")
+    return re.sub(pattern, lambda match: match[0] if match["code"] else transform(match[0]), content)
+
+
+def normalize_math_blanks(content):
+    return transform_math(content, lambda text: re.sub(r"(?<!\\)_{2,}", lambda _: r"\underline{\qquad\qquad}", text))
+
+
 def find_browser():
     configured = os.environ.get("MATH_COMP_BROWSER")
     if configured:
@@ -96,6 +114,11 @@ def export_pdf(md_path, title=None, engine="browser", html_only=False):
     md_path = Path(md_path).resolve()
     if not md_path.is_file():
         raise FileNotFoundError(f"找不到 Markdown 文件：{md_path}")
+    source = md_path.read_text(encoding="utf-8")
+    normalized = normalize_math_blanks(source)
+    if normalized != source:
+        md_path.write_text(normalized, encoding="utf-8")
+        print("[!] 已自动修复公式中的填空横线，继续导出。", flush=True)
     pdf_path = md_path.with_suffix(".pdf")
     title = title or md_path.stem
     if html_only:
@@ -144,10 +167,15 @@ def export_pdf(md_path, title=None, engine="browser", html_only=False):
         if not re.search(r'<html\b[^>]*data-render-state="ready"', rendered):
             error = re.search(r'<pre id="render-errors"[^>]*>(.*?)</pre>', rendered, re.S)
             details = html.unescape(error.group(1)).strip() if error else "浏览器未完成排版，请检查浏览器和离线资源。"
-            raise RuntimeError(
+            data = re.search(r'<pre id="render-errors"[^>]*data-formulas="([^"]*)"', rendered)
+            formulas = json.loads(html.unescape(data[1])) if data else []
+            message = (
                 f"公式排版失败：{details or '渲染脚本未能加载。'}\n"
                 f"Markdown 和 HTML 已保留。请修正 {md_path.name} 中的公式后重新导出，无需重新调用 AI。"
             )
+            if formulas:
+                raise FormulaRenderError(message, formulas)
+            raise RuntimeError(message)
         # Keep the fully rendered HTML so it is also useful for previewing and manual printing.
         rendered = re.sub(r"<script\b[^>]*>[\s\S]*?</script>", "", rendered, flags=re.I)
         html_path.write_text(rendered, encoding="utf-8")

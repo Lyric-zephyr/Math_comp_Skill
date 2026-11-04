@@ -127,7 +127,7 @@ class MathApp:
                                     relief="flat", bd=0, padx=9, pady=6, cursor="hand2")
             widget.pack(side="left", fill="x", expand=True, padx=(0, 5 if not self.mode_buttons else 0))
             self.mode_buttons.append(widget)
-        self.chapters = ["全部模块（一键生成 7 份）", *MODULE_RULES]
+        self.chapters = ["全部模块（一键生成 6 份）", *MODULE_RULES]
         self.chapter_var = tk.StringVar(value=self.chapters[1])
         chapter_frame = tk.Frame(task, bg=panel)
         chapter_frame.pack(fill="x", pady=(8, 0))
@@ -346,6 +346,10 @@ class MathApp:
 
     def toggle_task_mode(self, *args):
         practice = self.mode_var.get() == "练习"
+        self.chapters = [f"全部模块（一键生成 {7 if practice else 6} 份）", *MODULE_RULES]
+        self.chapter_menu.config(values=self.chapters)
+        if self.chapter_var.get().startswith("全部模块"):
+            self.chapter_var.set(self.chapters[0])
         for button, value in zip(self.mode_buttons, ("总结知识点", "练习")):
             button.config(fg="#00ffcc" if self.mode_var.get() == value else "#8494aa")
         self.task_badge.config(text="PRACTICE" if practice else "SUMMARY")
@@ -356,7 +360,7 @@ class MathApp:
         else:
             self.source_frame.pack_forget()
             self.resource_tip.config(text="教材可选：放入 local_textbook 优先参考；没有教材时，AI 直接总结知识点。")
-            message = "已切换知识点总结：优先参考教材，没有相关教材时依据 AI 自身知识生成；不读取真题或题库。"
+            message = "已切换知识点总结：全面梳理、精炼表达并突出重点；批量生成前六模块，综合总结可单独选取。不读取真题或题库。"
         self.log(message, "[TIP]")
 
     def toggle_output_format(self, event=None):
@@ -511,8 +515,8 @@ class MathApp:
         self.status_label.config(text="STATUS: INITIALIZING...")
         
         target_chapters = []
-        if chapter == "全部模块（一键生成 7 份）":
-            target_chapters = self.chapters[1:]
+        if chapter.startswith("全部模块"):
+            target_chapters = list(MODULE_RULES)[:6 if mode == "总结知识点" else 7]
         else:
             target_chapters = [chapter]
 

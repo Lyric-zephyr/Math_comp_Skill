@@ -49,6 +49,7 @@ def build_prompt(mode, chapter, context, log=print):
         "不要用代码块包裹全文；文件保存、格式转换和排版由启动器完成。"
         r"公式使用 KaTeX 支持的语法；分式必须完整写成 \frac{分子}{分母}，"
         r"例如 \frac{0}{0}、\frac{\infty}{\infty}，不得省略分子、分母或花括号。"
+        r"数学环境内的填空横线写成 \underline{\qquad\qquad}，不得使用连续下划线。"
         "输出前检查每个公式的参数、花括号及数学定界符是否完整配对。"
         f"{task_instruction}\n\n"
         f"【技能规则】\n{rules}\n\n【参考资料】\n{context}"

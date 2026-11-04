@@ -138,8 +138,27 @@ Overwritten or unrecorded past papers cannot be reconstructed automatically.
 | 6 | Series and ordinary differential equations |
 | 7 | Comprehensive practice and connections across modules |
 
-Choose **全部模块 (All modules)** to generate seven separate documents.
+Choose **全部模块 (All modules)** to generate **six summaries** (modules 1–6)
+or **seven practice documents** (modules 1–7), depending on the task.
 The current queue processes modules one at a time.
+
+Summary priorities are **complete coverage first**, then **concise explanations
+with clear emphasis on key points**. Cover definitions, formulas, conditions,
+theorems, methods, extensions, and common mistakes. Present formulas, conditions,
+and key results under natural subheadings, with only brief necessary explanations.
+Use short paragraphs rather than bullet lists or mechanically numbered items.
+Avoid restating formulas in prose or expanding unnecessary derivations; preserve
+essential content and emphasize key points.
+Merge redundant formulas and omit unnecessary intermediate expressions, aiming
+for about 20% fewer formulas without losing essential coverage. Usually highlight
+6–8 important formulas per module with boxes and bold the key statements.
+There is no fixed word-count target or requirement to match a textbook's length.
+Each module is generated in three parts—formulas, theorems, and extensions—then combined.
+Only an unfinished part is retried once. Select module 7 separately for a complete
+compilation of modules 1–6 plus connections between them; it keeps all six modules'
+content rather than compressing it into a single short overview. This requires
+more AI requests and may increase generation time and API charges. Coverage and
+mathematical accuracy still depend on the model and should be reviewed.
 
 ## Output formats
 
@@ -156,6 +175,8 @@ previous file in that format.
 
 Formatted documents use **14pt Songti body text**, two-character paragraph
 indents, bold Heiti headings, numbered subheadings, and bold key statements.
+Body paragraphs after headings or equations also use two-character first-line
+indents; standalone equations are centered without paragraph indentation.
 Major headings use 16pt; only major sections enter the table of contents.
 Practice paper and solution headings are centered. Markdown appearance depends
 on the viewer.
@@ -163,6 +184,14 @@ on the viewer.
 Browser PDF export scales overwide formulas individually to keep body text at
 its intended size. KaTeX, Marked, and math fonts are bundled locally; rendering
 does not need a CDN. AI generation still needs a network connection.
+
+Runs of underscores inside math are automatically converted to valid fill-in
+lines. If browser PDF/HTML export still reports invalid formulas, generation
+automatically asks the selected AI to repair only those formulas and retries
+export up to twice, without regenerating the questions or the entire document.
+These repair requests may incur API charges. Browser startup/printing failures
+are also retried once. If recovery fails, Markdown remains available for editing
+and re-export; no unlimited retry loop is used.
 
 ## What one-click setup handles
 

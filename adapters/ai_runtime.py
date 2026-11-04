@@ -162,6 +162,14 @@ def generate_content(provider, args, base_dir):
         mode = "总结知识点" if args.task_mode == "summary" else "练习"
         args.prompt = build_prompt(mode, args.chapter, args.prompt)
     print(f"[*] 运行方式：{args.run_mode}", flush=True)
+    summary = args.task_mode == "summary" or (not args.task_mode and "任务：【总结知识点】" in args.prompt[:512])
+    if summary:
+        match = re.search(r"章节：【([^】]+)】", args.prompt[:512])
+        chapter = args.chapter or (match[1] if match else None)
+        if chapter not in MODULE_RULES:
+            raise ValueError("知识点总结需要有效模块。")
+        return _generate_summary(chapter, args.prompt,
+                                 lambda prompt: _generate_once(provider, args, base_dir, prompt))
     practice = args.task_mode == "practice" or (not args.task_mode and "任务：【练习】" in args.prompt[:512])
     if practice:
         if __package__:
@@ -178,6 +186,99 @@ def generate_content(provider, args, base_dir):
                                  lambda prompt: _generate_once(provider, args, base_dir, prompt),
                                  directory=Path(base_dir) / "local_practice")
     return _generate_once(provider, args, base_dir, args.prompt)
+
+
+def _generate_summary(chapter, prompt, generate):
+    """分段展开，综合总结直接合并六模块全文，避免一次回答压缩全部内容。"""
+    chapters = list(MODULE_RULES)
+    if chapter == chapters[-1]:
+        context = prompt.partition("【参考资料】\n")[2]
+        parts = []
+        for current in chapters[:-1]:
+            print(f"[*] 综合总结：正在完整整理 {current}", flush=True)
+            body = _generate_summary(current, build_prompt("总结知识点", current, context), generate)
+            body = re.sub(r"(?m)^(#{2,5})(?=\s)", r"#\1", body)
+            parts.append(f"## {current}\n\n{body}")
+        # 跨章节联系另外生成，不以概览替代六模块正文。
+        parts.append(_generate_summary_part(prompt, "跨章节联系与适用条件", generate))
+        return "\n\n".join(parts) + "\n"
+    parts = []
+    for heading in ("一、基础公式", "二、核心定理", "三、竞赛拓展结论"):
+        print(f"[*] 知识点总结分段生成：{chapter} / {heading}", flush=True)
+        parts.append(_generate_summary_part(prompt, heading, generate))
+    return "\n\n".join(parts) + "\n"
+
+
+def _generate_summary_part(prompt, heading, generate):
+    instruction = (f"\n\n【分段执行】各部分由程序分别生成再合并。本轮仅输出 `## {heading}` 及其全部内容，"
+                   "不输出总标题、目录或其他部分。第一原则是全面，第二原则是在完整覆盖的前提下尽可能简洁并突出重点。"
+                   "覆盖子知识点、符号含义、成立条件、方法选择和易错点，不遗漏关键条件或例外；"
+                   "以公式、成立条件和关键结论为主，只补充必要的短句，减少文字解释和叙述；"
+                   "公式已表达的内容不再用文字复述，省去非必要推导、重复说明与铺垫。"
+                   "小标题下采用公式配简短自然段，不使用圆点项目列表，不机械编号或刻意分条，"
+                   "不统一套用‘关键词：解释’格式，随内容自然换段。"
+                   "合并重复、同义变形和非必要中间式，公式数量约减少五分之一，保留定义式、关键结论及条件；"
+                   "不要把省略公式改成长文字。按重要程度增加公式框选，全模块通常6–8个，不重复框选或为凑数框选。"
+                   "独立公式用$$包裹，与文字空行分隔并居中；正文段落由模板统一首行缩进两个汉字。"
+                   "重要定义、条件、结论及易错语句用**加粗**，不限定每节只能加粗几处。"
+                   "保持编号小标题及正文重点加粗；不按教材字数或页数凑篇幅，也不能为求短省掉知识点。")
+    for attempt in range(2):
+        try:
+            body = generate(prompt + instruction).strip()
+            body = re.sub(r"\A#[ \t]+[^\n]*\n+", "", body)
+            if not body:
+                raise RuntimeError("知识点分段返回空正文。")
+            headings = re.findall(r"(?m)^##[ \t]+(.+?)\s*$", body)
+            if headings and headings != [heading]:
+                raise RuntimeError(f"知识点分段结构不正确，应只包含：{heading}。")
+            if not headings:
+                body = f"## {heading}\n\n{body}"
+            return body
+        except (RuntimeError, subprocess.TimeoutExpired):
+            if attempt:
+                raise
+            print(f"[!] {heading}生成未完成，正在重试本部分；已完成部分不会重新生成。", flush=True)
+
+
+def save_generated_document(provider, args, base_dir, content):
+    """只修复报错公式并重新导出，不重新出题或生成整篇正文。"""
+    if __package__:
+        from .document_export import save_document
+        from .pdf_export import transform_math
+    else:
+        from document_export import save_document
+        from pdf_export import transform_math
+
+    def repair(current, error):
+        formulas = list(dict.fromkeys(error.formulas))
+        prompt = (
+            "修复下列公式的 KaTeX/LaTeX 语法。只返回 JSON 数组，每项包含 old 和 new 两个字符串；"
+            "old 必须逐字等于输入公式，new 为修复后的公式，不带 $ 或其他数学定界符。"
+            "保留数学含义、符号、条件和数值，只修复语法，不重新解题或修改正文。"
+            "反斜杠按 JSON 规范转义；每个输入公式必须对应一项。\n"
+            + json.dumps({"formulas": formulas, "error": str(error)}, ensure_ascii=False)
+        )
+        reply = _generate_once(provider, args, base_dir, prompt).strip()
+        reply = re.sub(r"\A```(?:json)?\s*|\s*```\Z", "", reply)
+        patches = json.loads(reply)
+        if (not isinstance(patches, list) or len(patches) != len(formulas)
+                or any(not isinstance(item, dict) or not isinstance(item.get("old"), str)
+                       or not isinstance(item.get("new"), str) or not item["new"].strip() for item in patches)
+                or {item["old"] for item in patches} != set(formulas)):
+            raise ValueError("AI 公式修复结果格式不完整，原文已保留。")
+        # 仅替换完整匹配的数学片段，避免误改包含相同前缀的正确公式。
+        replacements = {item["old"]: item["new"] for item in patches}
+        if any(formula not in current for formula in formulas):
+            raise ValueError("报错公式与原文不匹配，停止自动修改并保留原文。")
+
+        def replace_formula(text):
+            width = 2 if text.startswith(("$$", r"\(", r"\[")) else 1
+            formula = text[width:-width]
+            return text[:width] + replacements.get(formula, formula) + text[-width:]
+
+        return transform_math(current, replace_formula)
+
+    return save_document(content, args.filename_prefix, args.output_format, args.pdf_engine, repair=repair)
 
 
 def _generate_once(provider, args, base_dir, prompt):

@@ -8,11 +8,11 @@ import sys
 
 if __package__:
     from .document_export import add_output_arguments, check_output_environment, save_document
-    from .ai_runtime import add_runtime_arguments, generate_content
+    from .ai_runtime import add_runtime_arguments, generate_content, save_generated_document
     from .skill_rules import order_problem_set, validate_problem_set
 else:
     from document_export import add_output_arguments, check_output_environment, save_document
-    from ai_runtime import add_runtime_arguments, generate_content
+    from ai_runtime import add_runtime_arguments, generate_content, save_generated_document
     from skill_rules import order_problem_set, validate_problem_set
 
 
@@ -56,7 +56,7 @@ def main(argv=None):
                 raise
 
         print(f"[*] 正在导出 {args.output_format.upper()}...", flush=True)
-        document_file = save_document(content, args.filename_prefix, args.output_format, args.pdf_engine)
+        document_file = save_generated_document("doubao", args, BASE_DIR, content)
     except subprocess.CalledProcessError as error:
         details = error.stderr or error.stdout or str(error)
         print(f"[-] 生成失败: {details.strip()}", file=sys.stderr, flush=True)
