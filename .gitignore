@@ -2,6 +2,7 @@
 *.pdf
 local_textbook/
 local_problems/
+local_practice/
 output/
 
 # Python environments and caches

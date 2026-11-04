@@ -17,7 +17,7 @@ if BASE_DIR not in sys.path:
 
 from adapters.document_export import OUTPUT_FORMATS, check_output_environment, save_document
 from adapters.setup_environment import configure_environment, configure_ai
-from adapters.ai_runtime import API_SETTINGS, RUN_MODES, api_model, list_api_models
+from adapters.ai_runtime import API_SETTINGS, RUN_MODES, api_model, list_api_models, validate_api_configuration
 from adapters.skill_rules import MODULE_RULES, build_prompt
 from adapters.problem_sources import open_source_index
 
@@ -495,6 +495,15 @@ class MathApp:
                 self.log("请填写 API 模型 ID；豆包可填写推理接入点 ID。", "[WARN]")
                 self.model_menu.focus_set()
                 return
+            try:
+                api_key, model_name, _ = validate_api_configuration(
+                    AI_PROVIDERS[ai], key=api_key or os.environ.get(API_SETTINGS[AI_PROVIDERS[ai]][0], ""),
+                    model=model_name,
+                )
+            except ValueError as error:
+                self.log(str(error), "[WARN]")
+                self.api_key_entry.focus_set()
+                return
         self.run_btn.config(state="disabled", text=">>> GENERATING... <<<", bg="#555555")
         self.fix_env_btn.config(state="disabled")
         self.progress_var.set(0)
@@ -521,22 +530,31 @@ class MathApp:
             env = os.environ.copy()
             env["PYTHONIOENCODING"] = "utf-8"
 
-            # Extract each PDF once per batch; reuse the text for all modules.
+            # 每批读取用户当前提供的 PDF；文字仅在本次任务内复用，不保存教材识别缓存。
             textbook_texts = {}
             for pdf_path in textbook_files:
                 self.log(f"正在提取教材: {os.path.basename(pdf_path)}", "[TEXTBOOK]")
                 try:
-                    result = subprocess.run(
-                        [sys.executable, extract_script, pdf_path],
-                        capture_output=True, text=True, encoding="utf-8", errors="replace",
-                        env=env, timeout=120, check=True,
-                    )
-                    if result.stdout.strip():
-                        textbook_texts[pdf_path] = result.stdout
+                    # 正文写入临时文件，日志实时显示；OCR 按批超时，整本书不再限时 120 秒。
+                    with tempfile.TemporaryDirectory(prefix="math-comp-textbook-") as directory:
+                        text_path = Path(directory) / "textbook.txt"
+                        with subprocess.Popen(
+                            [sys.executable, "-u", extract_script, pdf_path, "--output", str(text_path)],
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, encoding="utf-8", errors="replace", env=env,
+                        ) as process:
+                            for line in process.stdout:
+                                if line.strip():
+                                    self.log(line.strip(), "[TEXTBOOK]")
+                            return_code = process.wait()
+                        if return_code:
+                            self.log(f"教材提取失败: {os.path.basename(pdf_path)}（退出码 {return_code}）；请查看上方错误。", "[ERR]")
+                            continue
+                        text = text_path.read_text(encoding="utf-8")
+                    if text.strip():
+                        textbook_texts[pdf_path] = text
                     else:
-                        self.log(f"{os.path.basename(pdf_path)} 无可提取文本，扫描件需要 OCR。", "[WARN]")
-                except subprocess.CalledProcessError as error:
-                    self.log(f"教材提取失败: {os.path.basename(pdf_path)}: {error.stderr.strip()}", "[ERR]")
+                        self.log(f"{os.path.basename(pdf_path)} 提取和 OCR 后仍没有可用文字。", "[WARN]")
                 except (OSError, subprocess.TimeoutExpired) as error:
                     self.log(f"教材提取失败: {os.path.basename(pdf_path)}: {error}", "[ERR]")
             if not textbook_texts:

@@ -65,6 +65,7 @@ jobs:
               "adapters/pdf_export.py",
               "skills/math-comp-prep/scripts/extract_pdf.py",
               "skills/math-comp-prep/scripts/compile_latex.py",
+              "skills/math-comp-prep/scripts/check_practice.py",
               "skills/math-comp-prep/scripts/scrape_cmathc.py",
           )
           for script in scripts:

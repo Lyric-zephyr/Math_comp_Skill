@@ -9,7 +9,7 @@ import sys
 
 from .pdf_export import check_environment, find_browser
 from .document_export import OUTPUT_FORMATS, check_output_environment
-from .ai_runtime import API_SETTINGS, RUN_MODES, api_model
+from .ai_runtime import RUN_MODES, validate_api_configuration
 from .tool_paths import find_tool, tool_environment
 
 
@@ -144,14 +144,7 @@ def configure_ai(provider, run_mode, log=print, api_key="", model=None):
             raise RuntimeError(f"GUI 浏览器启动检查失败：{error}") from None
         log("GUI 自动化启动检查通过；网站登录和验证在生成时完成。")
     elif run_mode == "API":
-        key_variable, url_variable, default_url, _, _ = API_SETTINGS[provider]
-        if not (api_key or os.environ.get(key_variable, "")).strip():
-            raise ValueError(f"请填写 API-Key，或设置 {key_variable}，然后重新点击配置。")
-        if not (model if model is not None else api_model(provider)).strip():
-            raise ValueError("请填写 API 模型 ID；豆包也可填写推理接入点 ID。")
-        base_url = os.environ.get(url_variable, default_url)
-        if not base_url.startswith("https://") and not base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
-            raise ValueError(f"{url_variable} 必须使用 HTTPS。")
+        validate_api_configuration(provider, key=api_key or None, model=model)
         log("API 本地配置检查通过：Key、模型和地址已填写；网络、密钥有效性及账户权限在生成时验证。")
     else:
         if not shutil.which("codex"):

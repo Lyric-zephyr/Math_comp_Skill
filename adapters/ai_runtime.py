@@ -3,6 +3,7 @@
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import urllib.error
@@ -27,12 +28,32 @@ def api_model(provider):
     return os.environ.get(variable, default)
 
 
-def list_api_models(provider, key, timeout=15):
-    """读取账号可见模型，不发送生成请求；实际权限仍由服务商决定。"""
-    _, url_variable, default_url, _, _ = API_SETTINGS[provider]
-    base_url = os.environ.get(url_variable, default_url).rstrip("/")
+def validate_api_configuration(provider, key=None, model=None, require_model=True):
+    """先检查本地配置，避免识别完整本教材后才因请求头编码失败。"""
+    key_variable, url_variable, default_url, _, _ = API_SETTINGS[provider]
+    if key is None:
+        key = os.environ.get("MATH_COMP_API_KEY") or os.environ.get(key_variable, "")
+    key = key.strip()
+    if not key:
+        raise ValueError(f"请填写 API-Key，或设置 {key_variable}。")
+    if any(not 33 <= ord(character) <= 126 for character in key):
+        raise ValueError("API-Key 含中文、空格或不可见字符。请从平台复制真实密钥，只粘贴 Key，不要包含说明文字、引号或 Bearer 前缀。")
+    if key.startswith(("'", '"')) or key.endswith(("'", '"')):
+        raise ValueError("API-Key 两端含引号，请只粘贴平台生成的密钥。")
+    model = (api_model(provider) if model is None else model).strip()
+    if require_model and not model:
+        raise ValueError("请填写 API 模型 ID；豆包也可填写推理接入点 ID。")
+    base_url = os.environ.get(url_variable, default_url).strip().rstrip("/")
     if not base_url.startswith("https://") and not base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
         raise ValueError(f"{url_variable} 必须使用 HTTPS。")
+    if any(not 33 <= ord(character) <= 126 for character in base_url):
+        raise ValueError(f"{url_variable} 含中文、空白或不可见字符，请填写平台提供的 API 服务地址。")
+    return key, model, base_url
+
+
+def list_api_models(provider, key, timeout=15):
+    """读取账号可见模型，不发送生成请求；实际权限仍由服务商决定。"""
+    key, _, base_url = validate_api_configuration(provider, key=key, require_model=False)
     request = urllib.request.Request(base_url + "/models", headers={"Authorization": f"Bearer {key}"})
     try:
         with urllib.request.urlopen(request, timeout=timeout) as response:
@@ -41,6 +62,8 @@ def list_api_models(provider, key, timeout=15):
         raise RuntimeError(f"HTTP {error.code}，请检查 API-Key、服务地址及模型列表接口权限") from None
     except urllib.error.URLError as error:
         raise RuntimeError(str(error.reason).replace(key, "[已隐藏]")) from None
+    except UnicodeEncodeError:
+        raise ValueError("API 请求头编码失败，请检查 API-Key 和代理配置是否混入中文或特殊字符。") from None
     if not isinstance(result, dict) or not isinstance(result.get("data"), list):
         raise ValueError("服务没有提供兼容的模型列表格式")
     models = sorted({item["id"] for item in result.get("data", [])
@@ -72,17 +95,7 @@ def _message_text(content):
 
 
 def generate_api(provider, prompt, model=None, timeout=1200):
-    key_variable, url_variable, default_url, _, _ = API_SETTINGS[provider]
-    key = os.environ.get("MATH_COMP_API_KEY") or os.environ.get(key_variable, "")
-    key = key.strip()
-    if not key:
-        raise ValueError(f"请填写 API-Key，或设置 {key_variable}。")
-    model = (model or api_model(provider)).strip()
-    if not model:
-        raise ValueError("请填写 API 模型 ID。")
-    base_url = os.environ.get(url_variable, default_url).rstrip("/")
-    if not base_url.startswith("https://") and not base_url.startswith(("http://127.0.0.1:", "http://localhost:")):
-        raise ValueError(f"{url_variable} 必须使用 HTTPS。")
+    key, model, base_url = validate_api_configuration(provider, model=model)
 
     if provider == "codex":
         endpoint = "/responses"
@@ -107,6 +120,8 @@ def generate_api(provider, prompt, model=None, timeout=1200):
         raise RuntimeError(f"API 请求失败（HTTP {error.code}）：{str(details).replace(key, '[已隐藏]')}") from None
     except urllib.error.URLError as error:
         raise RuntimeError(f"无法连接 API：{str(error.reason).replace(key, '[已隐藏]')}") from None
+    except UnicodeEncodeError:
+        raise ValueError("API 请求头编码失败，请检查 API-Key 和代理配置是否混入中文或特殊字符。") from None
 
     if not isinstance(result, dict):
         raise ValueError("API 返回格式异常：预期为 JSON 对象。")
@@ -147,21 +162,40 @@ def generate_content(provider, args, base_dir):
         mode = "总结知识点" if args.task_mode == "summary" else "练习"
         args.prompt = build_prompt(mode, args.chapter, args.prompt)
     print(f"[*] 运行方式：{args.run_mode}", flush=True)
+    practice = args.task_mode == "practice" or (not args.task_mode and "任务：【练习】" in args.prompt[:512])
+    if practice:
+        if __package__:
+            from .practice_history import generate_practice
+        else:
+            from practice_history import generate_practice
+        chapter = args.chapter
+        if not chapter:
+            match = re.search(r"章节：【([^】]+)】", args.prompt[:512])
+            chapter = match[1] if match else None
+        if chapter not in MODULE_RULES:
+            raise ValueError("练习避重需要有效模块；直接调用请同时提供 --task-mode practice 和 --chapter。")
+        return generate_practice(chapter, args.prompt,
+                                 lambda prompt: _generate_once(provider, args, base_dir, prompt),
+                                 directory=Path(base_dir) / "local_practice")
+    return _generate_once(provider, args, base_dir, args.prompt)
+
+
+def _generate_once(provider, args, base_dir, prompt):
     if args.run_mode == "API":
-        return generate_api(provider, args.prompt, args.api_model, args.timeout)
+        return generate_api(provider, prompt, args.api_model, args.timeout)
     if args.run_mode == "GUI":
         if __package__:
             from .gui_runtime import generate_gui
         else:
             from gui_runtime import generate_gui
-        return generate_gui(provider, args.prompt, args.timeout)
+        return generate_gui(provider, prompt, args.timeout)
 
     backend = shutil.which("codex")
     if not backend:
         raise FileNotFoundError("找不到 codex 命令，请先安装并登录 Codex CLI。")
     command = [backend, "exec", "--model", args.model_name, "--sandbox", "read-only", "--skip-git-repo-check", "-"]
     result = subprocess.run(
-        command, input=args.prompt, cwd=Path(base_dir), capture_output=True, text=True,
+        command, input=prompt, cwd=Path(base_dir), capture_output=True, text=True,
         encoding="utf-8", errors="replace", timeout=args.timeout, check=True,
     )
     return result.stdout.strip()

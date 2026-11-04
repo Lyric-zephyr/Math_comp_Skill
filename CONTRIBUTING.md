@@ -55,7 +55,7 @@ uploading a complete textbook or competition paper.
 - Update the README when behavior, setup, or dependencies change.
 - Keep third-party attribution and license terms. New reference material needs
   a source, license, attribution, and a description of any changes.
-- Exclude `output/`, `local_textbook/`, `local_problems/`, credentials, and build
+- Exclude `output/`, `local_textbook/`, `local_problems/`, `local_practice/`, credentials, and build
   artifacts from commits and release archives.
 
 Before submitting, check the changed behavior with a small example. Do not use

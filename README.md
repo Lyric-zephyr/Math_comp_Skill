@@ -64,6 +64,9 @@ both required; website login does not replace API credentials.
 Keys entered in the app stay in memory and are passed to the adapter through
 its environment. They are not saved in project files or command-line arguments.
 API charges depend on the provider and your account.
+Paste only the actual key, without labels, quotes, or a `Bearer` prefix. Local
+checks reject non-ASCII characters and embedded whitespace before textbook
+extraction, preventing request-header encoding errors after a long OCR run.
 
 ### GPT CLI
 
@@ -105,6 +108,25 @@ grouped under separate first-paper and second-paper headings.
 
 The app checks question counts, numbering, and section structure. This check
 does not verify mathematical correctness or guarantee competition difficulty.
+
+Practice also keeps a per-module question history in `local_practice/`, shared
+across AI providers, running methods, and output formats. New papers are checked
+against all recorded questions and against each other. Exact repeats, changes
+limited to numbers or variable names, and highly similar text trigger up to two
+additional generation requests, which can incur additional API charges. If all
+three attempts fail the check, export stops. Semantic equivalence cannot be
+guaranteed by text checks alone; the Skill also requires different problem designs.
+
+Keep this ignored local history to preserve avoidance across restarts. It stores
+question statements, not textbook OCR results, and records accepted questions
+even if subsequent document conversion fails. Earlier Markdown papers can be
+registered with:
+
+```sh
+python skills/math-comp-prep/scripts/check_practice.py "paper.md" --chapter "模块一：极限与连续" --record
+```
+
+Overwritten or unrecorded past papers cannot be reconstructed automatically.
 
 | Module | Topic |
 | --- | --- |
@@ -169,9 +191,20 @@ be installed manually. AI and output setup report their results separately.
 ## Optional textbooks and practice references
 
 Click **打开教材文件夹 (Open textbook folder)** and place textbook PDFs in
-`local_textbook/`. Each PDF is read once per batch; matching excerpts are sent
-to your chosen AI. Scanned textbooks need OCR first. Missing or irrelevant
-textbook content does not prevent knowledge summaries from being generated.
+`local_textbook/`. The reader works with user-provided PDFs across textbooks
+and editions. Each new batch reads the current PDFs; matching excerpts are sent
+to your chosen AI. On Windows, pages without a text layer are automatically
+processed by the built-in OCR engine, with progress shown in the log.
+Recognition results are used only within the current batch, without a persistent
+textbook cache; temporary conversion files are cleaned up automatically.
+A large scanned book can take several minutes to process on each run. OCR
+requires an installed Windows recognition language. The AI may correct OCR
+errors using context and mathematical consistency checks; material assumptions
+must be identified, and unrecoverable passages are skipped. Such reconstruction
+does not establish the exact original wording or guarantee mathematical accuracy.
+On other systems, add a text layer with an OCR tool first.
+Missing or irrelevant textbook content does not prevent knowledge summaries
+from being generated.
 
 In **PRACTICE** mode, **真题来源 (Past-paper sources)** opens a report covering
 discovered sources from editions **1–17**. An indexed edition is not a claim
@@ -202,8 +235,9 @@ for access observations, attribution, and licenses.
 | The API model field is empty | Enter a key and click **读取模型**, or type the exact API model/endpoint ID |
 | The model list cannot be read | Check the key and selected provider; enter the ID manually if listing is unsupported |
 | An API call is rejected | Check the key, model access, endpoint, and account status with the provider |
+| A `latin-1` or API-Key character error appears | Copy the real key from the provider again; remove labels, quotes, a `Bearer` prefix, or placeholder text. Do not change the encoding of the textbook or strip characters from the secret itself |
 | GPT GUI does not continue | Complete login/verification in the retained window; website changes may require an adapter update |
-| A textbook cannot be read | OCR scanned PDFs first; summaries can also run without textbooks |
+| A textbook cannot be read | On Windows, let automatic OCR finish; if its language is unavailable, install Chinese OCR in Windows language settings. Elsewhere, OCR the PDF first. Summaries can also run without textbooks |
 | A formula fails to render | Use the reported Markdown line to fix the saved source, then export it again |
 | The output file is locked | Close the existing document in its viewer and retry export |
 | A practice paper has the wrong structure | Review the retained Markdown; the app preserves it rather than exporting an invalid layout |
@@ -237,6 +271,7 @@ GPT, DeepSeek, and Doubao share the same task and module rules.
 | [document.html](skills/math-comp-prep/assets/web/document.html) | Browser PDF/HTML typography |
 | [template.tex](skills/math-comp-prep/assets/template.tex) | XeLaTeX typography |
 | [format_practice.lua](skills/math-comp-prep/scripts/format_practice.lua) | Practice layout for LaTeX export |
+| [check_practice.py](skills/math-comp-prep/scripts/check_practice.py) | Check or register papers against per-module question history |
 
 Rule changes affect new generations. Template changes affect newly exported
 documents; existing PDFs keep their layout until exported again.
@@ -312,6 +347,7 @@ Math_comp_Skill/
 ├── skills/math-comp-prep/   # Shared rules, scripts, templates, open references
 ├── local_textbook/          # Optional user textbooks; created when needed
 ├── local_problems/          # Runtime reference cache; created when needed
+├── local_practice/          # Per-module generated-question history; local only
 └── output/                  # Generated documents
 ```
 
