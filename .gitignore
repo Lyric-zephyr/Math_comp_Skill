@@ -1,9 +1,11 @@
 # Local study material and generated documents
 *.pdf
-local_textbook/
+local_textbook/*
+!local_textbook/.gitkeep
 local_problems/
 local_practice/
-output/
+output/*
+!output/.gitkeep
 
 # Python environments and caches
 __pycache__/

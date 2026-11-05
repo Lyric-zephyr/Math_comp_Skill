@@ -11,8 +11,10 @@ import urllib.request
 
 if __package__:
     from .skill_rules import MODULE_RULES, build_prompt
+    from .task_progress import report_progress
 else:
     from skill_rules import MODULE_RULES, build_prompt
+    from task_progress import report_progress
 
 
 API_SETTINGS = {
@@ -162,6 +164,7 @@ def generate_content(provider, args, base_dir):
         mode = "总结知识点" if args.task_mode == "summary" else "练习"
         args.prompt = build_prompt(mode, args.chapter, args.prompt)
     print(f"[*] 运行方式：{args.run_mode}", flush=True)
+    report_progress(5, "准备生成正文")
     summary = args.task_mode == "summary" or (not args.task_mode and "任务：【总结知识点】" in args.prompt[:512])
     if summary:
         match = re.search(r"章节：【([^】]+)】", args.prompt[:512])
@@ -185,27 +188,40 @@ def generate_content(provider, args, base_dir):
         return generate_practice(chapter, args.prompt,
                                  lambda prompt: _generate_once(provider, args, base_dir, prompt),
                                  directory=Path(base_dir) / "local_practice")
-    return _generate_once(provider, args, base_dir, args.prompt)
+    content = _generate_once(provider, args, base_dir, args.prompt)
+    report_progress(85, "正文生成完成")
+    return content
 
 
-def _generate_summary(chapter, prompt, generate):
+def _generate_summary(chapter, prompt, generate, progress=None):
     """分段展开，综合总结直接合并六模块全文，避免一次回答压缩全部内容。"""
     chapters = list(MODULE_RULES)
+    if progress is None:
+        total_parts = 19 if chapter == chapters[-1] else 3
+        completed = 0
+
+        def progress(stage):
+            nonlocal completed
+            completed += 1
+            report_progress(5 + 80 * completed / total_parts, f"总结分段完成 {completed}/{total_parts} · {stage}")
+
     if chapter == chapters[-1]:
         context = prompt.partition("【参考资料】\n")[2]
         parts = []
         for current in chapters[:-1]:
             print(f"[*] 综合总结：正在完整整理 {current}", flush=True)
-            body = _generate_summary(current, build_prompt("总结知识点", current, context), generate)
+            body = _generate_summary(current, build_prompt("总结知识点", current, context), generate, progress)
             body = re.sub(r"(?m)^(#{2,5})(?=\s)", r"#\1", body)
             parts.append(f"## {current}\n\n{body}")
         # 跨章节联系另外生成，不以概览替代六模块正文。
         parts.append(_generate_summary_part(prompt, "跨章节联系与适用条件", generate))
+        progress("跨章节联系与适用条件")
         return "\n\n".join(parts) + "\n"
     parts = []
     for heading in ("一、基础公式", "二、核心定理", "三、竞赛拓展结论"):
         print(f"[*] 知识点总结分段生成：{chapter} / {heading}", flush=True)
         parts.append(_generate_summary_part(prompt, heading, generate))
+        progress(heading)
     return "\n\n".join(parts) + "\n"
 
 
@@ -250,6 +266,7 @@ def save_generated_document(provider, args, base_dir, content):
         from pdf_export import transform_math
 
     def repair(current, error):
+        report_progress(92, "修复公式并重新导出")
         formulas = list(dict.fromkeys(error.formulas))
         prompt = (
             "修复下列公式的 KaTeX/LaTeX 语法。只返回 JSON 数组，每项包含 old 和 new 两个字符串；"
@@ -278,7 +295,10 @@ def save_generated_document(provider, args, base_dir, content):
 
         return transform_math(current, replace_formula)
 
-    return save_document(content, args.filename_prefix, args.output_format, args.pdf_engine, repair=repair)
+    report_progress(90, f"正在导出 {args.output_format.upper()}")
+    document = save_document(content, args.filename_prefix, args.output_format, args.pdf_engine, repair=repair)
+    report_progress(100, "文档已保存")
+    return document
 
 
 def _generate_once(provider, args, base_dir, prompt):

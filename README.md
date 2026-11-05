@@ -142,6 +142,14 @@ Choose **全部模块 (All modules)** to generate **six summaries** (modules 1�
 or **seven practice documents** (modules 1–7), depending on the task.
 The current queue processes modules one at a time.
 
+The progress bar shows the whole workflow as a percentage: environment checks
+(0–5%), textbook reading (5–25%), and the selected modules (25–100%). Textbook
+progress follows pages inspected/OCR batches; generation advances when summary
+parts finish, practice validation finishes, and files are exported. During a
+single AI request it stays at the current stage: this is workflow progress,
+not a token count or a time estimate. Retries do not move the bar backward.
+At 100%, the queue has been processed; check the success/failure counts in the log.
+
 Summary priorities are **complete coverage first**, then **concise explanations
 with clear emphasis on key points**. Cover definitions, formulas, conditions,
 theorems, methods, extensions, and common mistakes. Present formulas, conditions,
@@ -221,12 +229,32 @@ be installed manually. AI and output setup report their results separately.
 
 Click **打开教材文件夹 (Open textbook folder)** and place textbook PDFs in
 `local_textbook/`. The reader works with user-provided PDFs across textbooks
-and editions. Each new batch reads the current PDFs; matching excerpts are sent
-to your chosen AI. On Windows, pages without a text layer are automatically
-processed by the built-in OCR engine, with progress shown in the log.
-Recognition results are used only within the current batch, without a persistent
-textbook cache; temporary conversion files are cleaned up automatically.
-A large scanned book can take several minutes to process on each run. OCR
+and editions. Matching excerpts are sent to your chosen AI. On Windows, pages
+without a text layer are automatically processed by the built-in OCR engine,
+with page progress shown in the UI and log.
+
+Successful recognition is saved locally in `local_textbook/.ocr-cache/`, which
+is covered by the existing Git ignore rule. Later runs hash the current PDF
+with SHA-256 and check the extractor/OCR script versions and PyMuPDF version;
+unchanged files reuse their text without repeating extraction or OCR. Renaming
+the same PDF does not invalidate its cache. Changed content, changed extraction
+tools, or damaged/incomplete cache data cause recognition to run again. Password
+and copy restrictions are checked before reading a cache. Only successful,
+nonempty results are saved, using an atomic file replacement; failed cache
+writes do not block the current run. Temporary page images are cleaned up.
+
+Delete `local_textbook/.ocr-cache/` to clear all textbook memory, or force a
+single textbook to be recognized again:
+
+```sh
+python skills/math-comp-prep/scripts/extract_pdf.py "textbook.pdf" --refresh --output textbook.txt
+```
+
+Use `--no-cache` to skip both cache reads and writes for that command.
+Caches contain textbook text, remain on this computer, and should not be
+included in public repositories or release archives. They do not improve OCR
+accuracy; force recognition again after fixing an OCR language/tool issue.
+A large scanned book can take several minutes on its first run. OCR
 requires an installed Windows recognition language. The AI may correct OCR
 errors using context and mathematical consistency checks; material assumptions
 must be identified, and unrecoverable passages are skipped. Such reconstruction
@@ -374,7 +402,7 @@ Math_comp_Skill/
 ├── launcher/app.py          # Desktop interface and task queue
 ├── adapters/                # AI integrations, environment setup, exporters
 ├── skills/math-comp-prep/   # Shared rules, scripts, templates, open references
-├── local_textbook/          # Optional user textbooks; created when needed
+├── local_textbook/          # Place textbook PDFs here; contents and OCR cache stay local
 ├── local_problems/          # Runtime reference cache; created when needed
 ├── local_practice/          # Per-module generated-question history; local only
 └── output/                  # Generated documents

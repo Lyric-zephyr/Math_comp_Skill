@@ -11,8 +11,10 @@ import uuid
 
 if __package__:
     from .skill_rules import MODULE_RULES, order_problem_set, validate_problem_set
+    from .task_progress import report_progress
 else:
     from skill_rules import MODULE_RULES, order_problem_set, validate_problem_set
+    from task_progress import report_progress
 
 
 HISTORY_DIR = Path(__file__).resolve().parent.parent / "local_practice"
@@ -127,6 +129,7 @@ def find_duplicates(questions, previous):
 def generate_practice(chapter, prompt, generate, directory=HISTORY_DIR, log=print):
     """最多生成三轮；通过结构和避重检查后记录，导出失败也保留出题历史。"""
     with history_file(chapter, directory) as path:
+        report_progress(5, "读取练习历史")
         previous = load_history(path, chapter)
         log(f"[HISTORY] {chapter}已有 {len(previous)} 道历史题目，本次两套及历史之间均检查重复。")
         # 提示词附入最近的题干，完整历史仍全部参加程序检查，避免提示词无限增长。
@@ -143,7 +146,9 @@ def generate_practice(chapter, prompt, generate, directory=HISTORY_DIR, log=prin
                 + "\n\n".join(examples))
         feedback = ""
         for attempt in range(3):
+            report_progress(10, f"等待 AI 生成练习 · 第 {attempt + 1} 轮")
             content = order_problem_set(generate(base + feedback + f"\n本次出题标识：{uuid.uuid4().hex}（不要写入正文）。"))
+            report_progress(70, "检查练习结构与题目重复")
             try:
                 validate_problem_set(content)
             except ValueError:
@@ -154,6 +159,7 @@ def generate_practice(chapter, prompt, generate, directory=HISTORY_DIR, log=prin
             if not duplicates:
                 save_history(path, chapter, previous + [text for _, text in questions])
                 log("[HISTORY] 20 道题目通过避重检查，已记录练习历史。")
+                report_progress(85, "练习检查通过")
                 return content
             if attempt < 2:
                 log(f"[WARN] 检测到 {len(duplicates)} 道重复或高度相似题，重新生成完整练习（{attempt + 1}/2）。")

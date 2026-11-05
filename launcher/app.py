@@ -20,6 +20,7 @@ from adapters.setup_environment import configure_environment, configure_ai
 from adapters.ai_runtime import API_SETTINGS, RUN_MODES, api_model, list_api_models, validate_api_configuration
 from adapters.skill_rules import MODULE_RULES, build_prompt
 from adapters.problem_sources import open_source_index
+from adapters.task_progress import parse_progress
 
 AI_ADAPTERS = {
     "GPT (Codex)": os.path.join(BASE_DIR, "adapters", "run_codex.py"),
@@ -216,7 +217,7 @@ class MathApp:
         self.progress_frame.grid(row=1, column=0, sticky="ew", pady=(0, 10))
         progress_header = tk.Frame(self.progress_frame, bg=panel)
         progress_header.pack(fill="x", padx=16, pady=(12, 6))
-        self.status_label = tk.Label(progress_header, text="STATUS: IDLE", font=("Consolas", 12), bg=panel, fg="#00ff41", anchor="w")
+        self.status_label = tk.Label(progress_header, text="STATUS: IDLE", font=("Consolas", 12), bg=panel, fg="#00ff41", anchor="w", width=1)
         self.status_label.pack(side="left", fill="x", expand=True)
         self.percent_label = tk.Label(progress_header, text="0%", font=("Consolas", 12, "bold"), bg=panel, fg=accent)
         self.percent_label.pack(side="right")
@@ -471,12 +472,13 @@ class MathApp:
         formatted_text = f"[{timestamp}] {prefix} {text}\n"
         self.ui(self.append_output, formatted_text)
 
-    def update_progress(self, current, total, chapter_name):
-        percent = (current / total) * 100 if total > 0 else 0
+    def update_progress(self, percent, stage):
+        # 失败重试时保持已完成的进度；只有开始新队列时归零。
+        percent = self.progress_var.get() if percent is None else max(self.progress_var.get(), min(100, max(0, percent)))
         self.progress_var.set(percent)
-        self.status_label.config(text=f"STATUS: [{current}/{total}]")
+        self.status_label.config(text=stage)
         self.percent_label.config(text=f"{percent:.0f}%")
-        self.root.title(f"MATH COMP // {chapter_name}")
+        self.root.title(f"MATH COMP // {stage}")
 
     def start_task(self):
         mode = self.mode_var.get()
@@ -525,8 +527,11 @@ class MathApp:
     def run_all_tasks(self, ai, mode, chapters, model_name, pdf_engine="browser", run_mode="CLI", api_key="", output_format="pdf"):
         total = len(chapters)
         successes = 0
+        processed = 0
         try:
+            self.ui(self.update_progress, 2, "检查运行环境")
             check_output_environment(output_format, pdf_engine)
+            self.ui(self.update_progress, 5, "准备读取教材")
             output_dir = os.path.join(BASE_DIR, "output")
             os.makedirs(output_dir, exist_ok=True)
             textbook_files = sorted(glob.glob(os.path.join(BASE_DIR, "local_textbook", "*.pdf")))
@@ -534,9 +539,9 @@ class MathApp:
             env = os.environ.copy()
             env["PYTHONIOENCODING"] = "utf-8"
 
-            # 每批读取用户当前提供的 PDF；文字仅在本次任务内复用，不保存教材识别缓存。
+            # 提取脚本校验文件内容及识别流程，命中缓存时直接复用；本批模块共享正文。
             textbook_texts = {}
-            for pdf_path in textbook_files:
+            for book_index, pdf_path in enumerate(textbook_files):
                 self.log(f"正在提取教材: {os.path.basename(pdf_path)}", "[TEXTBOOK]")
                 try:
                     # 正文写入临时文件，日志实时显示；OCR 按批超时，整本书不再限时 120 秒。
@@ -548,7 +553,12 @@ class MathApp:
                             text=True, encoding="utf-8", errors="replace", env=env,
                         ) as process:
                             for line in process.stdout:
-                                if line.strip():
+                                progress = parse_progress(line)
+                                if progress:
+                                    value, stage = progress
+                                    self.ui(self.update_progress, 5 + 20 * (book_index + value / 100) / len(textbook_files),
+                                            f"教材 {book_index + 1}/{len(textbook_files)} · {stage}")
+                                elif line.strip():
                                     self.log(line.strip(), "[TEXTBOOK]")
                             return_code = process.wait()
                         if return_code:
@@ -561,11 +571,15 @@ class MathApp:
                         self.log(f"{os.path.basename(pdf_path)} 提取和 OCR 后仍没有可用文字。", "[WARN]")
                 except (OSError, subprocess.TimeoutExpired) as error:
                     self.log(f"教材提取失败: {os.path.basename(pdf_path)}: {error}", "[ERR]")
+                finally:
+                    self.ui(self.update_progress, 5 + 20 * (book_index + 1) / len(textbook_files), "教材读取阶段完成")
+            self.ui(self.update_progress, 25, "准备生成正文")
             if not textbook_texts:
                 self.log("没有可用的教材文本，AI 将基于自身知识生成。", "[WARN]")
 
             for i, chap in enumerate(chapters):
-                self.ui(self.update_progress, i, total, chap)
+                task_start, task_share = 25 + 75 * i / total, 75 / total
+                self.ui(self.update_progress, task_start, f"模块 {i + 1}/{total} · 整理参考资料")
                 self.log(f"队列进度 [{i+1}/{total}] 开始处理: {chap}", "[QUEUE]")
                 try:
                     keywords = MODULE_RULES[chap][1]
@@ -602,7 +616,13 @@ class MathApp:
                         text=True, encoding="utf-8", errors="replace", env=adapter_env, cwd=BASE_DIR,
                     ) as process:
                         for line in process.stdout:
-                            self.ui(self.append_output, line)
+                            progress = parse_progress(line)
+                            if progress:
+                                value, stage = progress
+                                self.ui(self.update_progress, task_start + task_share * value / 100,
+                                        f"模块 {i + 1}/{total} · {stage}")
+                            else:
+                                self.ui(self.append_output, line)
                         return_code = process.wait()
                     if return_code:
                         self.log(f"失败: {chap}（退出码 {return_code}）", "[ERR]")
@@ -611,11 +631,14 @@ class MathApp:
                         self.log(f"完成: {chap}", "[DONE]")
                 except Exception as error:
                     self.log(f"执行失败: {chap}: {error}", "[ERR]")
+                finally:
+                    processed = i + 1
+                    self.ui(self.update_progress, task_start + task_share, f"已处理 {processed}/{total} 个模块")
         except Exception as error:
             self.log(f"队列执行失败: {error}", "[ERR]")
         finally:
-            status = "ALL COMPLETED" if successes == total else "COMPLETED WITH ERRORS"
-            self.ui(self.update_progress, total, total, status)
+            status = "全部完成" if total and successes == total else "任务结束，存在失败项"
+            self.ui(self.update_progress, 100 if total and processed == total else None, status)
             self.log(f"队列结束：成功 {successes} 项，失败 {total - successes} 项。成功文件保存在 output 文件夹。")
             self.ui(self.run_btn.config, state="normal", text=">>> EXECUTE PROTOCOL <<<", bg="#00ffcc")
             self.ui(self.fix_env_btn.config, state="normal")
