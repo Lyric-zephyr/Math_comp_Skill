@@ -9,31 +9,102 @@ mainly in Chinese; this README explains the Chinese button labels as you go.
 
 ## Quick start
 
-You need **Python 3.10+ with Tkinter** and access to one supported AI service.
+You need **Python 3.10+**, a modern browser, and access to one supported AI service.
+The default interface is a light Chinese web workspace served only on this computer.
+Tkinter is needed only for the legacy interface.
 No API key, textbook, or browser session is included in the repository.
 
 1. Download the complete repository and extract it, or clone it with Git.
-2. Open a terminal in the folder containing `main.py`, then run:
+2. Open a terminal in the folder containing `main.py`, install the backend dependencies, then run:
 
    ```sh
+   python -m pip install -r requirements.txt
    python main.py
    ```
 
-3. Choose **SUMMARY** for study notes or **PRACTICE** for questions and solutions,
+   The launcher opens your browser after the server is ready. Release packages include
+   the built frontend; for a source checkout, build it once as described below.
+
+3. Choose **知识点总结** for study notes or **题目练习** for questions and solutions,
    then choose a module.
-4. Choose an AI service and running method from the table below. For **API**,
+4. Open **设置** to choose an AI service and running method from the table below. For **API**,
    enter your key and model ID. Select **Word**, **PDF**, **MD**, or **HTML** under
-   **OUTPUT FORMAT**.
+   **输出格式**.
 5. **Click 一键配置环境 (One-click setup) first.** The app installs missing
    tools where supported, checks the selected setup, and exports a sample.
-   Follow any login instructions in the green log panel.
-6. Click **EXECUTE PROTOCOL** to generate your document.
+   Follow any login instructions in the **详细日志** panel.
+6. Click **开始生成** to generate your document.
 
 Files are saved in `output/` and open automatically when generation succeeds.
-Use **打开输出文件夹 (Open output folder)** to find them later.
+Use **输出文件夹 (Open output folder)** to find them later.
 
 **No textbook is required.** If you provide one, relevant excerpts take
 priority. Otherwise, the AI generates notes from its own mathematics knowledge.
+
+## Web workspace and development
+
+The React/TypeScript frontend and FastAPI backend are separate. Production assets
+are served by the same local server; no cloud deployment or Node.js runtime is
+needed for everyday use. Source checkouts require Node.js 22+ to build once:
+
+```sh
+npm --prefix frontend ci
+npm --prefix frontend run build
+python main.py
+```
+
+After frontend changes, rebuild and refresh the page. For frontend-only work,
+`npm --prefix frontend run dev` serves Vite; it intentionally has no production
+API credentials or cross-origin API proxy. Use the built interface for integrated
+work. Missing assets produce explicit build instructions instead of installing
+Node.js automatically. Backend dependencies are in `requirements.txt`.
+
+The server chooses an available port on `127.0.0.1` and opens an authenticated
+startup URL. The token is exchanged for an HttpOnly, SameSite cookie; the UI removes
+the startup query from its displayed address. Do not share the startup URL.
+Host, Origin and session authentication are checked on API requests. Files can
+only be opened using server-issued IDs or fixed resource names.
+
+Refreshing, closing, or reopening the page does not interrupt a task. Keep the
+launcher terminal running; press Ctrl+C there to stop the service and its workers.
+The dedicated ChatGPT login browser remains open. Only one generation, setup, or
+source-index task runs at a time. There is no pause, cancellation, historical task
+browser, or resume after a backend restart. The current task, bounded logs and
+result files remain visible while the backend runs; all task snapshots remain in
+server memory until shutdown. Ordinary preferences are saved in browser local
+storage. API keys stay in backend memory, are never returned to the frontend,
+and must be re-entered after a backend restart unless supplied by environment.
+
+The task card contains module and format choices. **设置** opens the AI settings
+drawer. The right panel shows actual stage progress, module statuses, results and
+collapsible logs. Partial failures expand the logs. Successful files still open
+automatically; result cards also offer **打开文件** and **所在文件夹**. Missing
+output dependencies should be prepared with **一键配置环境**.
+
+The old interface remains available during migration:
+
+```sh
+python main.py --legacy-ui
+```
+
+It shares the same generation and environment-setup service. It requires Tkinter.
+`python main.py --no-browser` starts the web server without opening a browser.
+
+To validate without AI calls:
+
+```sh
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+npm --prefix frontend run build
+npm --prefix frontend exec -- playwright install chromium
+npm --prefix frontend test
+```
+
+Browser tests use a temporary simulated backend, never your textbooks or keys.
+On Windows they use installed Edge; on Linux they use Playwright Chromium.
+Create a distributable source ZIP including built assets with
+`python scripts/package_release.py`; it packages committed sources and the current
+frontend build, excluding local study data. Commit source changes before packaging.
 
 ## Choose an AI service
 
@@ -227,7 +298,7 @@ be installed manually. AI and output setup report their results separately.
 
 ## Optional textbooks and practice references
 
-Click **打开教材文件夹 (Open textbook folder)** and place textbook PDFs in
+Click **教材文件夹 (Open textbook folder)** and place textbook PDFs in
 `local_textbook/`. The reader works with user-provided PDFs across textbooks
 and editions. Matching excerpts are sent to your chosen AI. On Windows, pages
 without a text layer are automatically processed by the built-in OCR engine,
@@ -398,8 +469,9 @@ not bypass access controls or guarantee a complete collection.
 
 ```text
 Math_comp_Skill/
-├── main.py                  # App entry point
-├── launcher/app.py          # Desktop interface and task queue
+├── main.py                  # Local web launcher; --legacy-ui for Tkinter
+├── frontend/                # React UI; dist/ is generated by the build
+├── launcher/                # Shared task service, FastAPI and legacy interface
 ├── adapters/                # AI integrations, environment setup, exporters
 ├── skills/math-comp-prep/   # Shared rules, scripts, templates, open references
 ├── local_textbook/          # Place textbook PDFs here; contents and OCR cache stay local
