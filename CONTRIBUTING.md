@@ -5,7 +5,8 @@ requests are welcome. Please keep discussions respectful and changes focused.
 
 ## Local development
 
-Use Python 3.10+ with Tkinter. From the project root:
+Use Python 3.10+ and Node.js 22+ for frontend development. Tkinter is optional
+and required only for `python main.py --legacy-ui`. From the project root:
 
 ```sh
 python -m venv .venv
@@ -28,6 +29,8 @@ format. To install the optional Python helpers manually:
 
 ```sh
 python -m pip install -r requirements.txt
+npm --prefix frontend ci
+npm --prefix frontend run build
 python main.py
 ```
 
@@ -47,7 +50,9 @@ uploading a complete textbook or competition paper.
 
 ## Making a change
 
-- Preserve the current UI style, supported methods, and output formats.
+- Preserve the Chinese light workspace, supported methods, and output formats.
+- Keep orchestration in the shared task service, independent of both UI layers.
+- Never store API keys in browser storage, task snapshots, URLs or logs.
 - Follow the surrounding naming and code style. Keep Skill instructions in
   Chinese and the README in English.
 - Keep summary and practice rules separate. All AI adapters must use the shared
@@ -58,7 +63,17 @@ uploading a complete textbook or competition paper.
 - Exclude `output/`, `local_textbook/`, `local_problems/`, `local_practice/`, credentials, and build
   artifacts from commits and release archives.
 
-Before submitting, check the changed behavior with a small example. Do not use
+Before submitting, run the backend tests and frontend build/browser tests:
+
+```sh
+python -m pip install -r requirements-dev.txt
+python -m pytest -q
+npm --prefix frontend run build
+npm --prefix frontend exec -- playwright install chromium
+npm --prefix frontend test
+```
+
+Check the changed behavior with a small example. Do not use
 paid API calls just to check documentation or formatting changes. Mention what
 you checked and any unavailable account or platform in the pull request.
 
