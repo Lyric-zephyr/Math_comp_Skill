@@ -15,6 +15,17 @@ organizers, or institutions listed below.
 Keep these notices when redistributing the corresponding JavaScript, CSS,
 fonts, or exported standalone HTML containing those assets.
 
+## Web workspace dependencies
+
+The React frontend uses React/React DOM, Radix UI, Tailwind CSS, Lucide,
+class-variance-authority, clsx and tailwind-merge, including their runtime
+transitive dependencies. Button and Sheet components adapt the shadcn/ui patterns.
+The bundled runtime license texts and attributions are collected in
+[frontend/THIRD_PARTY_LICENSES.txt](frontend/THIRD_PARTY_LICENSES.txt); retain this
+file when redistributing frontend builds. Build/test tools retain their own
+package license terms. FastAPI, Uvicorn and psutil are separately installed
+Python dependencies under their respective MIT/BSD licenses.
+
 ## Bundled reference selections
 
 | Collection | Included material | Applicable license |

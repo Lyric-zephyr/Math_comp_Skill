@@ -4,10 +4,8 @@ import subprocess
 import threading
 import os
 import time
-import glob
 import queue
 import sys
-import tempfile
 import webbrowser
 from pathlib import Path
 
@@ -15,12 +13,10 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if BASE_DIR not in sys.path:
     sys.path.insert(0, BASE_DIR)
 
-from adapters.document_export import OUTPUT_FORMATS, check_output_environment, save_document
-from adapters.setup_environment import configure_environment, configure_ai
+from adapters.document_export import OUTPUT_FORMATS
 from adapters.ai_runtime import API_SETTINGS, RUN_MODES, api_model, list_api_models, validate_api_configuration
-from adapters.skill_rules import MODULE_RULES, build_prompt
+from adapters.skill_rules import MODULE_RULES
 from adapters.problem_sources import open_source_index
-from adapters.task_progress import parse_progress
 
 AI_ADAPTERS = {
     "GPT (Codex)": os.path.join(BASE_DIR, "adapters", "run_codex.py"),
@@ -38,6 +34,8 @@ class MathApp:
     def __init__(self, root):
         self.root = root
         self.ui_events = queue.Queue()
+        self.task_service = None
+        self.root.protocol("WM_DELETE_WINDOW", self.close)
         self.root.title("MATH COMP // Competition workspace")
         self.root.configure(bg="#0a0a0f")
         self.root.minsize(1100, 800)
@@ -246,6 +244,11 @@ class MathApp:
         self.root.after(100, self.poll_events)
         self.show_usage_hint()
 
+    def close(self):
+        if self.task_service:
+            self.task_service.close()
+        self.root.destroy()
+
     def ui(self, callback, *args, **kwargs):
         self.ui_events.put((callback, args, kwargs))
 
@@ -276,35 +279,15 @@ class MathApp:
         self.log(f"正在配置 {ai} / {run_mode} 和 {self.output_format_var.get()} 输出环境...", "[FIX]")
 
         def run_fix():
-            failures = []
+            from launcher.task_service import TaskService
             try:
-                try:
-                    configure_environment(engine, lambda message: self.log(message, "[FIX]"), output_format=output_format)
-                    with tempfile.TemporaryDirectory(prefix="math-comp-env-") as work:
-                        sample = Path(work) / "check.md"
-                        sample.write_text(
-                            "# 输出格式检查\n\n## 一、基础公式\n\n### 1. 极限的含义\n\n"
-                            "这是首行缩进两个汉字的宋体四号正文，**关键条件应加粗**，标题应为黑体加粗。\n\n"
-                            "- 中文列表\n\n由\n$$\n\\lim_{x\\to 0}\\frac{\\sin x}{x}\n=\n1\n$$\n"
-                            "可知极限为 $1$。\n\n"
-                            "$$\\boxed{a^2+b^2=c^2}$$\n\n"
-                            "| 检查项 | 结果 |\n| --- | --- |\n| 表格 | 正常 |\n",
-                            encoding="utf-8",
-                        )
-                        save_document(sample.read_text(encoding="utf-8"), Path(work) / "check", output_format, engine)
-                    self.log(f"{output_format.upper()} 输出环境与实际文件导出检查通过。", "[FIX]")
-                except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
-                    failures.append(output_format.upper())
-                    self.log(f"输出环境配置未完成：{getattr(error, 'stderr', None) or error}", "[ERR]")
-                try:
-                    configure_ai(AI_PROVIDERS[ai], run_mode, lambda message: self.log(message, "[FIX]"), api_key, model_name)
-                except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
-                    failures.append("AI")
-                    self.log(f"{ai} / {run_mode} 配置未完成：{getattr(error, 'stderr', None) or error}", "[ERR]")
-                if failures:
-                    self.log("配置检查结束，仍需处理：" + "、".join(failures) + "。请查看上方对应错误。", "[WARN]")
-                else:
-                    self.log(f"{ai} / {run_mode} 与 {output_format.upper()} 输出环境配置均已完成。", "[FIX]")
+                self.task_service = TaskService(lambda kind, data: self.log(data["text"], "[FIX]") if kind == "log" else None)
+                self.task_service.setup({
+                    "ai": ai, "run_mode": run_mode, "api_key": api_key, "model": model_name,
+                    "pdf_engine": engine, "output_format": output_format,
+                })
+            except Exception as error:
+                self.log(str(error), "[ERR]")
             finally:
                 self.ui(self.fix_env_btn.config, state="normal")
                 self.ui(self.run_btn.config, state="normal")
@@ -525,121 +508,16 @@ class MathApp:
         threading.Thread(target=self.run_all_tasks, args=(ai, mode, target_chapters, model_name, pdf_engine, run_mode, api_key, output_format), daemon=True).start()
 
     def run_all_tasks(self, ai, mode, chapters, model_name, pdf_engine="browser", run_mode="CLI", api_key="", output_format="pdf"):
-        total = len(chapters)
-        successes = 0
-        processed = 0
+        from launcher.task_service import TaskService
+        def emit(kind, data):
+            if kind == "progress":
+                self.ui(self.update_progress, data["percent"], data["stage"])
+            elif kind == "log":
+                self.ui(self.append_output, data["text"] + "\n")
         try:
-            self.ui(self.update_progress, 2, "检查运行环境")
-            check_output_environment(output_format, pdf_engine)
-            self.ui(self.update_progress, 5, "准备读取教材")
-            output_dir = os.path.join(BASE_DIR, "output")
-            os.makedirs(output_dir, exist_ok=True)
-            textbook_files = sorted(glob.glob(os.path.join(BASE_DIR, "local_textbook", "*.pdf")))
-            extract_script = os.path.join(BASE_DIR, "skills", "math-comp-prep", "scripts", "extract_pdf.py")
-            env = os.environ.copy()
-            env["PYTHONIOENCODING"] = "utf-8"
-
-            # 提取脚本校验文件内容及识别流程，命中缓存时直接复用；本批模块共享正文。
-            textbook_texts = {}
-            for book_index, pdf_path in enumerate(textbook_files):
-                self.log(f"正在提取教材: {os.path.basename(pdf_path)}", "[TEXTBOOK]")
-                try:
-                    # 正文写入临时文件，日志实时显示；OCR 按批超时，整本书不再限时 120 秒。
-                    with tempfile.TemporaryDirectory(prefix="math-comp-textbook-") as directory:
-                        text_path = Path(directory) / "textbook.txt"
-                        with subprocess.Popen(
-                            [sys.executable, "-u", extract_script, pdf_path, "--output", str(text_path)],
-                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                            text=True, encoding="utf-8", errors="replace", env=env,
-                        ) as process:
-                            for line in process.stdout:
-                                progress = parse_progress(line)
-                                if progress:
-                                    value, stage = progress
-                                    self.ui(self.update_progress, 5 + 20 * (book_index + value / 100) / len(textbook_files),
-                                            f"教材 {book_index + 1}/{len(textbook_files)} · {stage}")
-                                elif line.strip():
-                                    self.log(line.strip(), "[TEXTBOOK]")
-                            return_code = process.wait()
-                        if return_code:
-                            self.log(f"教材提取失败: {os.path.basename(pdf_path)}（退出码 {return_code}）；请查看上方错误。", "[ERR]")
-                            continue
-                        text = text_path.read_text(encoding="utf-8")
-                    if text.strip():
-                        textbook_texts[pdf_path] = text
-                    else:
-                        self.log(f"{os.path.basename(pdf_path)} 提取和 OCR 后仍没有可用文字。", "[WARN]")
-                except (OSError, subprocess.TimeoutExpired) as error:
-                    self.log(f"教材提取失败: {os.path.basename(pdf_path)}: {error}", "[ERR]")
-                finally:
-                    self.ui(self.update_progress, 5 + 20 * (book_index + 1) / len(textbook_files), "教材读取阶段完成")
-            self.ui(self.update_progress, 25, "准备生成正文")
-            if not textbook_texts:
-                self.log("没有可用的教材文本，AI 将基于自身知识生成。", "[WARN]")
-
-            for i, chap in enumerate(chapters):
-                task_start, task_share = 25 + 75 * i / total, 75 / total
-                self.ui(self.update_progress, task_start, f"模块 {i + 1}/{total} · 整理参考资料")
-                self.log(f"队列进度 [{i+1}/{total}] 开始处理: {chap}", "[QUEUE]")
-                try:
-                    keywords = MODULE_RULES[chap][1]
-                    references = []
-                    budget = 20000 // max(len(textbook_texts), 1)
-                    for pdf_path, text in textbook_texts.items():
-                        excerpts = []
-                        remaining = budget
-                        for offset in range(0, len(text), 1000):
-                            chunk = text[offset:offset + 1200]
-                            if any(keyword in chunk for keyword in keywords):
-                                excerpts.append(chunk[:remaining])
-                                remaining -= len(excerpts[-1])
-                                if remaining <= 0:
-                                    break
-                        if excerpts:
-                            references.append(f"--- 来源：{os.path.basename(pdf_path)} ---\n" + "\n".join(excerpts))
-                    prompt_context = "\n\n".join(references)[:20000]
-                    if textbook_texts and not prompt_context:
-                        self.log(f"未找到与 {chap} 匹配的教材片段。", "[WARN]")
-                    prompt = build_prompt(mode, chap, prompt_context, log=lambda message: self.log(message, "[SOURCE]" if mode == "练习" else "[RULE]"))
-                    safe_name = f"{mode}_{chap}".replace("：", "_").replace(" ", "")
-                    cmd = [sys.executable, "-u", AI_ADAPTERS[ai], prompt, os.path.join(output_dir, safe_name)]
-                    if ai == "GPT (Codex)" and run_mode == "CLI":
-                        cmd.append(model_name)
-                    cmd.extend(["--pdf-engine", pdf_engine, "--run-mode", run_mode, "--output-format", output_format])
-                    adapter_env = env.copy()
-                    if run_mode == "API":
-                        cmd.extend(["--api-model", model_name])
-                        if api_key:
-                            adapter_env["MATH_COMP_API_KEY"] = api_key
-                    with subprocess.Popen(
-                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                        text=True, encoding="utf-8", errors="replace", env=adapter_env, cwd=BASE_DIR,
-                    ) as process:
-                        for line in process.stdout:
-                            progress = parse_progress(line)
-                            if progress:
-                                value, stage = progress
-                                self.ui(self.update_progress, task_start + task_share * value / 100,
-                                        f"模块 {i + 1}/{total} · {stage}")
-                            else:
-                                self.ui(self.append_output, line)
-                        return_code = process.wait()
-                    if return_code:
-                        self.log(f"失败: {chap}（退出码 {return_code}）", "[ERR]")
-                    else:
-                        successes += 1
-                        self.log(f"完成: {chap}", "[DONE]")
-                except Exception as error:
-                    self.log(f"执行失败: {chap}: {error}", "[ERR]")
-                finally:
-                    processed = i + 1
-                    self.ui(self.update_progress, task_start + task_share, f"已处理 {processed}/{total} 个模块")
-        except Exception as error:
-            self.log(f"队列执行失败: {error}", "[ERR]")
+            self.task_service = TaskService(emit)
+            self.task_service.run_all_tasks(ai, mode, chapters, model_name, pdf_engine, run_mode, api_key, output_format)
         finally:
-            status = "全部完成" if total and successes == total else "任务结束，存在失败项"
-            self.ui(self.update_progress, 100 if total and processed == total else None, status)
-            self.log(f"队列结束：成功 {successes} 项，失败 {total - successes} 项。成功文件保存在 output 文件夹。")
             self.ui(self.run_btn.config, state="normal", text=">>> EXECUTE PROTOCOL <<<", bg="#00ffcc")
             self.ui(self.fix_env_btn.config, state="normal")
 

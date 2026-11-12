@@ -1,6 +1,7 @@
 """Generate study content with DeepSeek and save the selected document format."""
 
 import argparse
+import json
 import os
 from pathlib import Path
 import subprocess
@@ -52,6 +53,7 @@ def main(argv=None):
                 validate_problem_set(content)
             except ValueError:
                 recovery = save_document(content, args.filename_prefix, "md")
+                print("[ARTIFACT] " + json.dumps({"path": str(recovery), "kind": "recovery"}, ensure_ascii=False), flush=True)
                 print(f"[!] 练习结构不符合要求，原文已保留：{recovery}", flush=True)
                 raise
 
@@ -65,6 +67,7 @@ def main(argv=None):
         print(f"[-] 生成失败: {error}", file=sys.stderr, flush=True)
         return 1
 
+    print("[ARTIFACT] " + json.dumps({"path": str(document_file), "kind": "document"}, ensure_ascii=False), flush=True)
     print(f"[+] 文件已保存: {document_file}", flush=True)
     open_document(document_file)
     return 0

@@ -1,6 +1,7 @@
 """Save one selected document format using the shared rendering tools."""
 
 import base64
+import json
 import os
 from pathlib import Path
 import re
@@ -162,6 +163,7 @@ def save_document(content, filename_prefix, output_format="pdf", pdf_engine="bro
     except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as error:
         recovery = Path(f"{prefix}.md")
         recovery.write_text(content.rstrip() + "\n", encoding="utf-8")
+        print("[ARTIFACT] " + json.dumps({"path": str(recovery), "kind": "recovery"}, ensure_ascii=False), flush=True)
         print(f"[!] 格式转换未完成，Markdown 已保留：{recovery}，无需重新调用 AI。", flush=True)
         if isinstance(error, PermissionError):
             raise RuntimeError("无法写入输出文档，请关闭正在打开的同名文件，并检查输出目录权限后重试导出。") from error

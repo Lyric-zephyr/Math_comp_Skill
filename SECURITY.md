@@ -28,3 +28,15 @@ documents in that public issue. No response-time guarantee is currently offered.
 
 One-click setup can install tools from package managers. Run the app from a
 trusted checkout and review changes before running contributed code.
+
+## Local web interface
+
+The default launcher binds only to `127.0.0.1`, chooses a free port, and opens a
+session-authenticated URL. Treat that URL as a secret. API access requires the
+session cookie or session header, an exact Host, and a same-origin Origin when
+present. The production frontend is served by the same process. Do not expose
+this service through a reverse proxy or change its bind address to a public one.
+The service is intended for one trusted local user, not multi-user hosting.
+Keys remain in process memory and child environments; ordinary UI preferences
+are stored in browser local storage. Result-open requests accept registered
+artifact IDs, never arbitrary client-supplied paths or shell commands.

@@ -53,3 +53,9 @@ Desktop.ini
 # Temporary browser and OCR workspaces
 .pdf-export-*/
 .ocr-*/
+
+# Web frontend
+node_modules/
+frontend/test-results/
+frontend/playwright-report/
+*.tsbuildinfo
