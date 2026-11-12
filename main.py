@@ -15,6 +15,11 @@ def main():
     parser.add_argument("--no-browser", action="store_true", help="仅启动服务")
     args = parser.parse_args()
     base = Path(__file__).resolve().parent
+    # 使用项目内环境，避免从 VS Code 或系统 Python 启动时找不到依赖。
+    environment = base / ".venv"
+    local_python = environment / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    if local_python.is_file() and Path(sys.prefix).resolve() != environment.resolve():
+        return subprocess.call([str(local_python), "-u", str(base / "main.py"), *sys.argv[1:]], cwd=base)
     if args.legacy_ui:
         return subprocess.call([sys.executable, "-u", str(base / "launcher" / "app.py")], cwd=base)
     if not (base / "frontend" / "dist" / "index.html").is_file():
@@ -24,7 +29,7 @@ def main():
         import uvicorn
         from launcher.web_api import create_app
     except ImportError:
-        print("缺少网页服务依赖，请运行 python -m pip install -r requirements.txt")
+        print(f'缺少网页服务依赖，请运行：\n  "{sys.executable}" -m pip install -r "{base / "requirements.txt"}"')
         return 1
     token = secrets.token_urlsafe(32)
     sock = socket.socket()

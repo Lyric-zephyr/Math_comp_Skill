@@ -106,6 +106,32 @@ def test_launcher_cli_entry_point():
     assert "Course_Skill" in result.stdout and "--legacy-ui" in result.stdout
 
 
+def test_launcher_uses_project_environment(tmp_path, monkeypatch):
+    import main as launcher
+    local_python = tmp_path / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    local_python.parent.mkdir(parents=True)
+    local_python.touch()
+    monkeypatch.setattr(launcher, "__file__", str(tmp_path / "main.py"))
+    monkeypatch.setattr(sys, "prefix", str(tmp_path / "system-python"))
+    monkeypatch.setattr(sys, "argv", ["main.py", "--no-browser"])
+    with patch.object(launcher.subprocess, "call", return_value=0) as run:
+        assert launcher.main() == 0
+    run.assert_called_once_with([str(local_python), "-u", str(tmp_path / "main.py"), "--no-browser"], cwd=tmp_path)
+
+
+def test_launcher_does_not_restart_inside_project_environment(tmp_path, monkeypatch):
+    import main as launcher
+    local_python = tmp_path / ".venv" / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
+    local_python.parent.mkdir(parents=True)
+    local_python.touch()
+    monkeypatch.setattr(launcher, "__file__", str(tmp_path / "main.py"))
+    monkeypatch.setattr(sys, "prefix", str(tmp_path / ".venv"))
+    monkeypatch.setattr(sys, "argv", ["main.py", "--legacy-ui"])
+    with patch.object(launcher.subprocess, "call", return_value=0) as run:
+        assert launcher.main() == 0
+    run.assert_called_once_with([sys.executable, "-u", str(tmp_path / "launcher" / "app.py")], cwd=tmp_path)
+
+
 def test_freeze_conflict_refresh_and_redaction(client):
     client, manager = client
     raw = {**DEFAULTS, "run_mode": "API", "model": "unit-model", "api_key": "unit-secret-key"}

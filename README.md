@@ -65,6 +65,8 @@ After frontend changes, rebuild and refresh the page. For frontend-only work,
 API credentials or cross-origin API proxy. Use the built interface for integrated
 work. Missing assets produce explicit build instructions instead of installing
 Node.js automatically. Backend dependencies are in `requirements.txt`.
+When a `.venv` exists in the project folder, `main.py` automatically uses its
+Python interpreter, including when launched from VS Code or a system Python.
 
 The server chooses an available port on `127.0.0.1` and opens an authenticated
 startup URL. The token is exchanged for an HttpOnly, SameSite cookie; the UI removes
