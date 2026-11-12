@@ -19,6 +19,7 @@ if __name__ == "__main__":
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
             stream.reconfigure(encoding="utf-8", errors="replace")
+    type_print("[SYS] Starting Course_Skill...", speed=0.02)
     type_print("[SYS] Mounting math-comp-prep SKILL modules...", speed=0.02)
     type_print("[SYS] Initializing Neural Network Adapters...", speed=0.02)
     type_print("[SYS] Booting Graphical User Interface...", speed=0.02, color="\033[92m")

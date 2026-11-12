@@ -1,4 +1,4 @@
-# Contributing to MATH COMP
+# Contributing to Course_Skill
 
 Bug reports, documentation fixes, math-rule improvements, and small pull
 requests are welcome. Please keep discussions respectful and changes focused.

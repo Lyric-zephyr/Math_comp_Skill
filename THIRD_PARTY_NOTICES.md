@@ -1,9 +1,8 @@
 # Third-party notices
 
-The [MIT License](LICENSE) covers original MATH COMP code, rules, documentation,
-and templates. It does not replace the licenses of dependencies or reference
-materials. This repository is not affiliated with the AI providers, competition
-organizers, or institutions listed below.
+The [MIT License](LICENSE) covers original Course_Skill code, rules, documentation,
+and templates. Third-party software and reference materials use the licenses
+listed below.
 
 ## Bundled software
 
@@ -24,9 +23,8 @@ fonts, or exported standalone HTML containing those assets.
 
 See the [reference-material notice](skills/math-comp-prep/assets/open_problems/NOTICE.md)
 and the individual JSON records for authors, original sources, license links,
-and changes. The MIT OCW selection has noncommercial and share-alike conditions;
-it is not MIT-licensed project code. Do not assume every dataset record or
-resource on a source website has the same license.
+and changes. MIT OCW material requires attribution, noncommercial use, and
+share-alike licensing for adaptations.
 
 ## Separately installed tools
 
@@ -40,10 +38,6 @@ repository:
 - Pandoc, MiKTeX/TeX Live packages, browsers, Node.js, and Codex CLI retain their
   respective terms. Browser fonts such as SimSun and SimHei are system fonts
   and are not bundled here.
-
-Review the applicable dependency terms before distributing an installer or
-combined application, especially when including PyMuPDF. Installing a tool
-does not change its license to the project's MIT license.
 
 ## User material and competition papers
 

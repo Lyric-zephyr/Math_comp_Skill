@@ -1,6 +1,9 @@
-# MATH COMP
+# Course_Skill
 
-A desktop study assistant for Chinese university mathematics competitions.
+A desktop study workspace with a subject selector for **数学竞赛 (Mathematics
+Competition)** and **复变函数 (Complex Analysis)**. Mathematics Competition is
+fully available; Complex Analysis currently provides a UI entry only, with
+generation disabled until its subject rules and backend are connected.
 Generate study notes or practice papers with your chosen AI, then save the
 result as **Word, PDF, Markdown, or HTML**.
 
@@ -19,8 +22,9 @@ No API key, textbook, or browser session is included in the repository.
    python main.py
    ```
 
-3. Choose **SUMMARY** for study notes or **PRACTICE** for questions and solutions,
-   then choose a module.
+3. Under **科目 (Subject)**, select **数学竞赛 (Mathematics Competition)**.
+   Choose **SUMMARY** for study notes or **PRACTICE** for questions and solutions,
+   then choose a module. **复变函数 (Complex Analysis)** is a UI preview only.
 4. Choose an AI service and running method from the table below. For **API**,
    enter your key and model ID. Select **Word**, **PDF**, **MD**, or **HTML** under
    **OUTPUT FORMAT**.
@@ -251,9 +255,7 @@ python skills/math-comp-prep/scripts/extract_pdf.py "textbook.pdf" --refresh --o
 ```
 
 Use `--no-cache` to skip both cache reads and writes for that command.
-Caches contain textbook text, remain on this computer, and should not be
-included in public repositories or release archives. They do not improve OCR
-accuracy; force recognition again after fixing an OCR language/tool issue.
+Caches stay local. Force recognition again after fixing an OCR language/tool issue.
 A large scanned book can take several minutes on its first run. OCR
 requires an installed Windows recognition language. The AI may correct OCR
 errors using context and mathematical consistency checks; material assumptions
@@ -277,11 +279,8 @@ identified as unverified simulated practice. OCR can misread formulas. The app
 also includes a small attributed selection of **three MathNet problems** and
 **six MIT OCW problems**, rather than a complete competition bank.
 
-Public access does not establish permission to redistribute material or send
-it to a third-party AI service. Use references you have the right to use.
-See the [source-access review](skills/math-comp-prep/references/source_access.md)
-and [open-material notice](skills/math-comp-prep/assets/open_problems/NOTICE.md)
-for access observations, attribution, and licenses.
+See the [source-access notes](skills/math-comp-prep/references/source_access.md)
+for source availability and retrieval behavior.
 
 ## Troubleshooting
 
@@ -311,9 +310,6 @@ Use complete formula syntax such as `\frac{a}{b}`; see
 [KaTeX-supported syntax](https://katex.org/docs/supported.html). If you already
 have a rendered HTML document, you can also open it in Edge/Chrome and use
 **Ctrl+P → Save as PDF**.
-
-AI-generated mathematics can contain mistakes. Review results before using them
-for teaching or exam preparation.
 
 ## Customize the rules
 
@@ -389,15 +385,14 @@ editions 1–17:
 python skills/math-comp-prep/scripts/scrape_cmathc.py --download-all
 ```
 
-Restricted, missing, and failed sources stay in the report. The command does
-not bypass access controls or guarantee a complete collection.
+The report lists restricted, missing, and failed sources.
 
 </details>
 
 ## Project layout
 
 ```text
-Math_comp_Skill/
+Course_Skill/
 ├── main.py                  # App entry point
 ├── launcher/app.py          # Desktop interface and task queue
 ├── adapters/                # AI integrations, environment setup, exporters
@@ -421,21 +416,10 @@ Python syntax, bundled JSON, and CLI entry points on Windows and Linux without
 calling AI services. Live accounts, GUI login, and document rendering require
 separate checks.
 
-Keep credentials, textbooks, cached papers, and generated documents out of
-commits and release archives. Report vulnerabilities using
-[SECURITY.md](SECURITY.md).
+Report vulnerabilities using [SECURITY.md](SECURITY.md).
 
 ## License
 
 Original project code, rules, and templates use the [MIT License](LICENSE).
-Third-party content keeps its own terms; see
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for the inventory:
-
-- The bundled MathNet selection uses **CC BY 4.0**.
-- The MIT OCW selection and its adaptations use **CC BY-NC-SA 4.0**.
-- [KaTeX](skills/math-comp-prep/assets/web/LICENSE-KaTeX.txt),
-  [Marked](skills/math-comp-prep/assets/web/LICENSE-Marked.txt), PyMuPDF, and other
-  dependencies retain their respective licenses.
-
-Textbooks and competition papers are not covered by the project's MIT license.
-Preserve applicable attribution and license terms when sharing derived material.
+Third-party software and reference materials retain their own licenses, listed
+in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

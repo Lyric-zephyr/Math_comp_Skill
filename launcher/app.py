@@ -32,13 +32,15 @@ AI_PROVIDERS = {"GPT (Codex)": "codex", "DeepSeek (DSH)": "dsh", "豆包": "doub
 AI_RUN_MODES = {name: RUN_MODES[provider] for name, provider in AI_PROVIDERS.items()}
 
 PDF_ENGINES = {"浏览器（推荐）": "browser", "LaTeX（专业排版）": "latex"}
+SUBJECTS = ("数学竞赛", "复变函数")
 
 
-class MathApp:
+class CourseApp:
     def __init__(self, root):
         self.root = root
         self.ui_events = queue.Queue()
-        self.root.title("MATH COMP // Competition workspace")
+        self.busy = False
+        self.root.title("Course_Skill // Course workspace")
         self.root.configure(bg="#0a0a0f")
         self.root.minsize(1100, 800)
         width = min(1280, self.root.winfo_screenwidth() - 60)
@@ -82,9 +84,9 @@ class MathApp:
 
         header = tk.Frame(self.main_frame, bg="#0a0a0f")
         header.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 10))
-        tk.Label(header, text="MATH COMP", font=("Consolas", 26, "bold"),
+        tk.Label(header, text="Course_Skill", font=("Consolas", 26, "bold"),
                  bg="#0a0a0f", fg=accent).pack(anchor="w")
-        tk.Label(header, text="数学竞赛备考工作台   /   HIGHER MATHEMATICS WORKSPACE",
+        tk.Label(header, text="课程复习工作台   /   COURSE STUDY WORKSPACE",
                  font=("Microsoft YaHei UI", 11), bg="#0a0a0f", fg=muted).pack(anchor="w", pady=(1, 0))
         tk.Frame(self.main_frame, bg="#243448", height=1).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 10))
         settings = tk.Frame(self.main_frame, bg="#0a0a0f")
@@ -116,7 +118,14 @@ class MathApp:
                              relief="flat", bd=0, padx=12, pady=6, cursor="hand2",
                              highlightthickness=1, highlightbackground="#30435a")
 
-        task = card(settings, "01 / TASK & MODULE", 0)
+        task = card(settings, "01 / COURSE & TASK", 0)
+        self.subject_var = tk.StringVar(value=SUBJECTS[0])
+        subject_frame = tk.Frame(task, bg=panel)
+        subject_frame.pack(fill="x", pady=(0, 10))
+        label(subject_frame, "科目")
+        self.subject_menu = ttk.Combobox(subject_frame, textvariable=self.subject_var, values=SUBJECTS,
+                                        state="readonly", style="Cyber.TCombobox", font=font)
+        self.subject_menu.pack(side="left", fill="x", expand=True)
         self.mode_var = tk.StringVar(value="总结知识点")
         mode_frame = tk.Frame(task, bg=panel)
         mode_frame.pack(fill="x", pady=(0, 5))
@@ -242,6 +251,7 @@ class MathApp:
         self.output_box.grid(row=1, column=0, sticky="nsew")
         self.output_box.vbar.configure(bg="#1c293b", troughcolor="#080d14", activebackground="#29435a", relief="flat", bd=0)
         self.mode_var.trace_add("write", self.toggle_task_mode)
+        self.subject_var.trace_add("write", self.toggle_task_mode)
         self.toggle_task_mode()
         self.root.after(100, self.poll_events)
         self.show_usage_hint()
@@ -271,8 +281,7 @@ class MathApp:
         api_key = self.api_key_var.get().strip() if run_mode == "API" else ""
         model_name = self.model_var.get()
         self.output_box.delete("1.0", "end")
-        self.fix_env_btn.config(state="disabled")
-        self.run_btn.config(state="disabled")
+        self.set_busy(True)
         self.log(f"正在配置 {ai} / {run_mode} 和 {self.output_format_var.get()} 输出环境...", "[FIX]")
 
         def run_fix():
@@ -306,8 +315,7 @@ class MathApp:
                 else:
                     self.log(f"{ai} / {run_mode} 与 {output_format.upper()} 输出环境配置均已完成。", "[FIX]")
             finally:
-                self.ui(self.fix_env_btn.config, state="normal")
-                self.ui(self.run_btn.config, state="normal")
+                self.ui(self.set_busy, False)
 
         threading.Thread(target=run_fix, daemon=True).start()
 
@@ -328,6 +336,9 @@ class MathApp:
             subprocess.run(["open", output_dir])
 
     def open_problem_sources(self):
+        if self.subject_var.get() != SUBJECTS[0]:
+            self.log("竞赛真题来源仅用于数学竞赛。", "[TIP]")
+            return
         if self.mode_var.get() != "练习":
             self.log("真题来源属于题目练习，请先切换至 PRACTICE。", "[TIP]")
             return
@@ -347,13 +358,25 @@ class MathApp:
 
     def toggle_task_mode(self, *args):
         practice = self.mode_var.get() == "练习"
-        self.chapters = [f"全部模块（一键生成 {7 if practice else 6} 份）", *MODULE_RULES]
-        self.chapter_menu.config(values=self.chapters)
+        competition = self.subject_var.get() == SUBJECTS[0]
+        self.chapters = ([f"全部模块（一键生成 {7 if practice else 6} 份）", *MODULE_RULES]
+                         if competition else ["复变函数（功能待接入）"])
+        self.chapter_menu.config(values=self.chapters, state="readonly" if competition else "disabled")
         if self.chapter_var.get().startswith("全部模块"):
             self.chapter_var.set(self.chapters[0])
+        elif self.chapter_var.get() not in self.chapters:
+            self.chapter_var.set(self.chapters[1] if competition else self.chapters[0])
         for button, value in zip(self.mode_buttons, ("总结知识点", "练习")):
             button.config(fg="#00ffcc" if self.mode_var.get() == value else "#8494aa")
         self.task_badge.config(text="PRACTICE" if practice else "SUMMARY")
+        self.set_busy(self.busy)
+        if not competition:
+            self.source_frame.pack_forget()
+            self.task_badge.config(text="COMING SOON")
+            message = "复变函数：目前仅提供科目选择，知识点总结和题目练习功能待接入。"
+            self.resource_tip.config(text=message)
+            self.log(message, "[TIP]")
+            return
         if practice:
             self.source_frame.pack(fill="x", pady=(8, 0), before=self.resource_tip)
             self.resource_tip.config(text="教材用于补充参考；练习另读取真题与开放题库，按非数 A 范围出题。")
@@ -478,9 +501,18 @@ class MathApp:
         self.progress_var.set(percent)
         self.status_label.config(text=stage)
         self.percent_label.config(text=f"{percent:.0f}%")
-        self.root.title(f"MATH COMP // {stage}")
+        self.root.title(f"Course_Skill // {stage}")
+
+    def set_busy(self, busy):
+        self.busy = busy
+        self.subject_menu.config(state="disabled" if busy else "readonly")
+        self.fix_env_btn.config(state="disabled" if busy else "normal")
+        self.run_btn.config(state="disabled" if busy or self.subject_var.get() != SUBJECTS[0] else "normal")
 
     def start_task(self):
+        if self.subject_var.get() != SUBJECTS[0]:
+            self.log("复变函数生成尚未接入，请切换数学竞赛使用现有功能。", "[TIP]")
+            return
         mode = self.mode_var.get()
         chapter = self.chapter_var.get() 
         ai = self.ai_var.get()
@@ -511,7 +543,7 @@ class MathApp:
                 self.api_key_entry.focus_set()
                 return
         self.run_btn.config(state="disabled", text=">>> GENERATING... <<<", bg="#555555")
-        self.fix_env_btn.config(state="disabled")
+        self.set_busy(True)
         self.progress_var.set(0)
         self.percent_label.config(text="0%")
         self.status_label.config(text="STATUS: INITIALIZING...")
@@ -640,10 +672,10 @@ class MathApp:
             status = "全部完成" if total and successes == total else "任务结束，存在失败项"
             self.ui(self.update_progress, 100 if total and processed == total else None, status)
             self.log(f"队列结束：成功 {successes} 项，失败 {total - successes} 项。成功文件保存在 output 文件夹。")
-            self.ui(self.run_btn.config, state="normal", text=">>> EXECUTE PROTOCOL <<<", bg="#00ffcc")
-            self.ui(self.fix_env_btn.config, state="normal")
+            self.ui(self.run_btn.config, text=">>> EXECUTE PROTOCOL <<<", bg="#00ffcc")
+            self.ui(self.set_busy, False)
 
 if __name__ == "__main__":
     root = tk.Tk()
-    app = MathApp(root)
+    app = CourseApp(root)
     root.mainloop()

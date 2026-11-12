@@ -15,8 +15,7 @@ Freeman 和 Antonio Torralba：
 <https://creativecommons.org/licenses/by/4.0/>.
 
 中文题干保留原题数据；原始题干与解答保留原文，供核对来源。
-MathNet 的许可说明优先尊重原权利人的明确声明，不能据此认为全部 MathNet
-记录都可自由再分发。新增资料前应逐条检查权利信息：
+新增资料按各条记录的权利信息核对，数据集许可说明：
 <https://github.com/ShadeAlsha/MathNet#license>.
 
 ## MIT 开放课程选题
@@ -29,16 +28,7 @@ MathNet 的许可说明优先尊重原权利人的明确声明，不能据此认
 使用时需保留署名、标明改动、遵守非商业限制，改编内容按相同许可证共享。
 还需核对 OCW 条款及个别资源的例外说明：<https://ocw.mit.edu/terms/>。
 
-该许可与本项目代码的 MIT 许可分别适用。基于这些题目生成的改编内容，仍需保留
-适用的署名与许可条款。本目录不附带原始 PDF。
-
-## 竞赛真题 PDF
-
-运行时索引覆盖第 1–17 届，并记录访问限制。默认在内存中读取允许访问的 PDF；
-仅在明确运行 `--download-all` 时保存原文件，禁止访问的路径会跳过。
-已有缓存不能绕过 robots、登录、密码或复制限制，也不代表获得再分发或向第三方
-AI 发送内容的许可。`local_problems/`、索引和 OCR 缓存不应放入公开发行包。
-具体观察及限制见 `references/source_access.md`。
+竞赛真题的来源与读取方式见 [来源说明](../../references/source_access.md)。
 
 ## 文件内容怎么看
 
