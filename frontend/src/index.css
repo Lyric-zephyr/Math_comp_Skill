@@ -1,13 +1,29 @@
 @import "tailwindcss";
-@theme { --font-sans: "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif; }
-:root { font-family: var(--font-sans); color: #18283e; background: #f5f7fb; font-synthesis: none; }
-body { margin: 0; min-width: 320px; }
-button, select, input { font: inherit; }
+@font-face {
+  font-family: "HYGuoTuChuangXinShanHaiJing75J";
+  src: local("HYGuoTuChuangXinShanHaiJing 75J"), local("HYGuoTuChuangXinShanHaiJing75J"), local("汉仪国图创新山海经 75简");
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+}
+@theme {
+  --font-sans: "HYGuoTuChuangXinShanHaiJing75J", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+  --font-mono: "HYGuoTuChuangXinShanHaiJing75J", ui-monospace, monospace;
+  --text-xs: 0.8125rem;
+  --text-sm: 0.9375rem;
+  --text-base: 1.0625rem;
+  --text-xl: 1.375rem;
+  --text-2xl: 1.625rem;
+  --text-3xl: 2rem;
+}
+:root { font-family: var(--font-sans); color: #18283e; background: #f5f7fb; font-synthesis: weight; }
+body { margin: 0; min-width: 320px; font-size: var(--text-base); }
+@layer base { button, select, input { font: inherit; } }
 button, summary { cursor: pointer; }
 select, input { width: 100%; min-width: 0; height: 44px; padding: 0 12px; background: white; border: 1px solid #dce3ed; border-radius: 8px; color: #263750; outline: none; }
 select:focus-visible, input:focus-visible { border-color: #3b82f6; box-shadow: 0 0 0 3px #dbeafe; }
-label { display: block; font-size: 13px; font-weight: 600; color: #536179; margin-bottom: 8px; }
+label { display: block; font-size: 15px; font-weight: 600; color: #536179; margin-bottom: 8px; }
 .card { border: 1px solid #e3e8f0; border-radius: 16px; background: white; box-shadow: 0 3px 14px #20355b03; }
-.eyebrow { color: #8995a8; font-size: 11px; letter-spacing: .15em; font-weight: 600; }
-.hint { color: #77859a; font-size: 12px; line-height: 1.8; }
+.eyebrow { color: #8995a8; font-size: 12px; letter-spacing: .15em; font-weight: 600; }
+.hint { color: #77859a; font-size: 14px; line-height: 1.8; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }

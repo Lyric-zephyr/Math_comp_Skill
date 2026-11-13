@@ -203,11 +203,17 @@ class Manager:
             thread.join(timeout=3)
 
 
-def open_path(path):
-    if os.name == "nt":
+def open_path(path, reveal=False):
+    path = Path(path).resolve(strict=True)
+    if os.name == "nt" and (path.is_dir() or reveal):
+        explorer = str(Path(os.environ.get("WINDIR", r"C:\Windows")) / "explorer.exe")
+        subprocess.Popen([explorer, *(["/select,"] if reveal and path.is_file() else []), str(path)])
+    elif os.name == "nt":
         os.startfile(str(path))
     else:
-        subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(path)])
+        target = path.parent if reveal and path.is_file() else path
+        subprocess.Popen(["open" if sys.platform == "darwin" else "xdg-open", str(target)])
+    return str(path.parent if reveal and path.is_file() else path)
 
 
 def create_app(port, token=None, manager=None, dist=None):
@@ -325,10 +331,10 @@ def create_app(port, token=None, manager=None, dist=None):
             raise HTTPException(404, "目录不存在")
         try:
             paths[name].mkdir(exist_ok=True)
-            open_path(paths[name])
+            opened = open_path(paths[name])
         except OSError:
             raise HTTPException(422, "无法打开文件夹，请检查系统文件管理器") from None
-        return {"ok": True}
+        return {"ok": True, "path": opened}
 
     @app.post("/api/artifacts/{artifact_id}/open")
     def artifact(artifact_id: str, action: OpenArtifact):
@@ -340,10 +346,10 @@ def create_app(port, token=None, manager=None, dist=None):
         if not any(resolved.is_relative_to(Path(BASE_DIR, directory).resolve()) for directory in ("output", "local_problems")):
             raise HTTPException(403, "结果文件路径已改变")
         try:
-            open_path(resolved.parent if action.folder else resolved)
+            opened = open_path(resolved, reveal=action.folder)
         except OSError:
             raise HTTPException(422, "文件已生成，但系统无法打开") from None
-        return {"ok": True}
+        return {"ok": True, "path": opened}
 
     if (dist / "assets").is_dir():
         app.mount("/assets", StaticFiles(directory=dist / "assets"), name="assets")

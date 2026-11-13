@@ -13,10 +13,10 @@ import xml.etree.ElementTree as ET
 import zipfile
 
 if __package__:
-    from .pdf_export import WEB_ASSETS, FormulaRenderError, check_environment, export_pdf, normalize_math_blanks
+    from .pdf_export import WEB_ASSETS, FormulaRenderError, check_environment, export_pdf, normalize_document
     from .tool_paths import find_tool, tool_environment
 else:
-    from pdf_export import WEB_ASSETS, FormulaRenderError, check_environment, export_pdf, normalize_math_blanks
+    from pdf_export import WEB_ASSETS, FormulaRenderError, check_environment, export_pdf, normalize_document
     from tool_paths import find_tool, tool_environment
 
 
@@ -140,9 +140,9 @@ def save_document(content, filename_prefix, output_format="pdf", pdf_engine="bro
 
 def _save_document(content, filename_prefix, output_format="pdf", pdf_engine="browser", repair=None):
     check_output_environment(output_format, pdf_engine)
-    normalized = normalize_math_blanks(content)
+    normalized = normalize_document(content)
     if normalized != content:
-        print("[!] 已自动修复公式中的填空横线，继续导出。", flush=True)
+        print("[!] 已自动规范公式与正文排版，继续导出。", flush=True)
     content = normalized
     prefix = Path(filename_prefix).expanduser().resolve()
     prefix.parent.mkdir(parents=True, exist_ok=True)
@@ -179,7 +179,7 @@ def _save_document(content, filename_prefix, output_format="pdf", pdf_engine="br
                     raise
                 print(f"[!] 公式排版失败，正在自动修复并重试 [{attempt + 1}/2]（仅修复报错公式，不重新生成正文）...", flush=True)
                 try:
-                    updated = normalize_math_blanks(repair(content, error))
+                    updated = normalize_document(repair(content, error))
                 except (ValueError, RuntimeError, subprocess.TimeoutExpired):
                     if attempt == 1:
                         raise

@@ -3,6 +3,11 @@
 from pathlib import Path
 import re
 
+if __package__:
+    from .pdf_export import normalize_document
+else:
+    from pdf_export import normalize_document
+
 SKILL_ROOT = Path(__file__).resolve().parent.parent / "skills"
 COMMON_DIR = SKILL_ROOT / "Common"
 SUBJECT_DIRS = {"数学竞赛": "Mathematics_Competition", "复变函数": "Complex_Analysis"}
@@ -118,6 +123,7 @@ def build_prompt(mode, chapter, context, log=print):
 
 def order_problem_set(content):
     """Keep both papers first and restart numbering in each paper and solution."""
+    content = normalize_document(content)
     sections = list(re.finditer(r"^##[ \t]+第[ \t]*([12一二])[ \t]*[组套][ \t]*(题目|详细解析|答案与解析)[^\n]*$", content, re.M))
     keys = [("详细解析" if match[2] != "题目" else "题目", "1" if match[1] in ("1", "一") else "2") for match in sections]
     expected = [("题目", "1"), ("题目", "2"), ("详细解析", "1"), ("详细解析", "2")]

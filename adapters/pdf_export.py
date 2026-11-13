@@ -27,16 +27,42 @@ class FormulaRenderError(RuntimeError):
         self.formulas = formulas
 
 
+DOCUMENT_PARTS = re.compile(
+    r"(?P<code>```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)"
+    r"|(?P<math>(?<!\\)\$\$[\s\S]+?(?<!\\)\$\$|(?<!\\)\$(?!\$)(?:\\.|[^$\\])+?(?<!\\)\$(?!\$)"
+    r"|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])"
+)
+
+
 def transform_math(content, transform):
     """只处理数学片段，保留正文、行内代码及代码块。"""
-    pattern = (r"(?P<code>```[\s\S]*?```|~~~[\s\S]*?~~~|`[^`\n]*`)"
-               r"|(?P<math>(?<!\\)\$\$[\s\S]+?(?<!\\)\$\$|(?<!\\)\$(?!\$)(?:\\.|[^$\\])+?(?<!\\)\$(?!\$)"
-               r"|\\\([\s\S]+?\\\)|\\\[[\s\S]+?\\\])")
-    return re.sub(pattern, lambda match: match[0] if match["code"] else transform(match[0]), content)
+    return DOCUMENT_PARTS.sub(lambda match: match[0] if match["code"] else transform(match[0]), content)
 
 
 def normalize_math_blanks(content):
     return transform_math(content, lambda text: re.sub(r"(?<!\\)_{2,}", lambda _: r"\underline{\qquad\qquad}", text))
+
+
+def normalize_document(content):
+    """规范排版标记与选项分段，保留公式和代码原文。"""
+    protected = []
+
+    def protect(match):
+        protected.append(match[0])
+        return f"\x00{len(protected) - 1}\x00"
+
+    text = DOCUMENT_PARTS.sub(protect, normalize_math_blanks(content))
+    # 居中交给模板处理，不把模型偶尔输出的 HTML 布局标签印进正文。
+    text = re.sub(r"(?im)^[ \t]*<(?:div|center)\b[^>\n]*>[ \t]*", "\n", text)
+    text = re.sub(r"(?im)</(?:div|center)>[ \t]*(?=\n|$)", "\n", text)
+    text = re.sub(
+        r"(?m)^[ \t]*(?:\*\*)?((?:第\s*[一二12]\s*[组套]\s*(?:题目|详细解析|答案与解析)|答案与解析))(?:\*\*)?[ \t]*$",
+        r"## \1", text,
+    )
+    # 每项成为独立自然段；全角句点避免 Pandoc 把 A. 识别为字母列表。
+    text = re.sub(r"(?m)^[ \t]*([A-D])(?:\\?\.|[．、)）])[ \t]*", r"\n\n\1． ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return re.sub(r"\x00(\d+)\x00", lambda match: protected[int(match[1])], text)
 
 
 def find_browser():
@@ -115,10 +141,10 @@ def export_pdf(md_path, title=None, engine="browser", html_only=False):
     if not md_path.is_file():
         raise FileNotFoundError(f"找不到 Markdown 文件：{md_path}")
     source = md_path.read_text(encoding="utf-8")
-    normalized = normalize_math_blanks(source)
+    normalized = normalize_document(source)
     if normalized != source:
         md_path.write_text(normalized, encoding="utf-8")
-        print("[!] 已自动修复公式中的填空横线，继续导出。", flush=True)
+        print("[!] 已自动规范公式与正文排版，继续导出。", flush=True)
     pdf_path = md_path.with_suffix(".pdf")
     title = title or md_path.stem
     if html_only:

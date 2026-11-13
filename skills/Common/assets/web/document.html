@@ -22,6 +22,7 @@ h1, h2, h3, h4, h5, h6 {
 #content p { text-indent: 2em; }
 #content.practice-paper h2 { text-align: center; }
 #content p.difficulty-label { text-indent: 0; }
+#content p.choice-option { text-indent: 2em; margin: 0; }
 #content li p, #content th p, #content td p { text-indent: 0; }
 p { orphans: 3; widows: 3; } a { color: black; }
 table { width: 100%; table-layout: fixed; border-collapse: collapse; margin: 1em 0; }
@@ -108,6 +109,7 @@ async function render() {
       headings.some(heading => /^(?:第\s*[12一二]\s*[组套]|(?:参考)?答案|详细解析)/.test(heading.textContent.trim())));
     document.querySelectorAll("#content p").forEach(paragraph => {
       if (/^【难度[：:].+】$/.test(paragraph.textContent.trim())) paragraph.classList.add("difficulty-label");
+      if (/^[A-D]．\s/.test(paragraph.textContent.trim())) paragraph.classList.add("choice-option");
     });
     if (headings.length) {
       const label = document.createElement("h2"); label.textContent = "目录";
