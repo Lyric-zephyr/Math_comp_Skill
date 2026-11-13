@@ -103,6 +103,18 @@ def _format_word(path, practice):
                 element(properties, "jc").set(tag("val"), "center" if display_math else "left")
                 paragraph.remove(properties)
                 paragraph.insert(0, properties)
+        for run in document.iter(tag("r")):
+            properties = run.find(tag("rPr"))
+            bold = None if properties is None else properties.find(tag("b"))
+            if bold is not None and bold.get(tag("val"), "1") not in ("0", "false", "off"):
+                fonts = element(properties, "rFonts")
+                for attribute in ("ascii", "hAnsi", "eastAsia", "cs"):
+                    fonts.set(tag(attribute), "SimHei")
+                for attribute in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
+                    fonts.attrib.pop(tag(attribute), None)
+                properties.remove(fonts)
+                properties.insert(1 if properties.find(tag("rStyle")) is not None else 0, fonts)
+                element(properties, "bCs").set(tag("val"), "1")
         replacements = {"word/styles.xml": ET.tostring(styles, encoding="utf-8", xml_declaration=True),
                         "word/document.xml": ET.tostring(document, encoding="utf-8", xml_declaration=True)}
         formatted = path.with_name("formatted.docx")

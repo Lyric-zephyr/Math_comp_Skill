@@ -379,8 +379,8 @@ On other systems, add a text layer with an OCR tool first.
 Missing or irrelevant textbook content does not prevent knowledge summaries
 from being generated.
 
-In **PRACTICE** mode, **真题来源 (Past-paper sources)** opens a report covering
-discovered sources from editions **1–17**. An indexed edition is not a claim
+The optional command-line source-index tool reports discovered past-paper
+sources from editions **1–17**. An indexed edition is not a claim
 that every paper was downloaded or read successfully.
 
 The reader checks robots rules, redirects, login responses, and PDF password

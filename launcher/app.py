@@ -6,7 +6,6 @@ import os
 import time
 import queue
 import sys
-import webbrowser
 from pathlib import Path
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -16,7 +15,6 @@ if BASE_DIR not in sys.path:
 from adapters.document_export import OUTPUT_FORMATS
 from adapters.ai_runtime import API_SETTINGS, RUN_MODES, api_model, list_api_models, validate_api_configuration
 from adapters.skill_rules import MODULE_RULES, SUBJECT_MODULES, batch_chapters
-from adapters.problem_sources import open_source_index
 from launcher.task_service import SUBJECTS
 
 AI_ADAPTERS = {
@@ -201,9 +199,6 @@ class CourseApp:
         self.open_dir_btn.pack(side="left", fill="x", expand=True, padx=(0, 8))
         self.open_output_btn = button(paths, "打开输出文件夹", self.open_output_dir)
         self.open_output_btn.pack(side="left", fill="x", expand=True)
-        self.source_frame = tk.Frame(resources, bg=panel)
-        self.open_sources_btn = button(self.source_frame, "真题来源  /  第 1–17 届", self.open_problem_sources)
-        self.open_sources_btn.pack(fill="x")
         self.resource_tip = tk.Label(resources, font=("Microsoft YaHei UI", 11), bg=panel, fg=muted,
                                      anchor="w", justify="left", wraplength=470)
         self.resource_tip.pack(fill="x", pady=(8, 0))
@@ -318,27 +313,6 @@ class CourseApp:
         else:
             subprocess.run(["open", output_dir])
 
-    def open_problem_sources(self):
-        if self.subject_var.get() != SUBJECTS[0]:
-            self.log("竞赛真题来源仅用于数学竞赛。", "[TIP]")
-            return
-        if self.mode_var.get() != "练习":
-            self.log("真题来源属于题目练习，请先切换至 PRACTICE。", "[TIP]")
-            return
-        self.open_sources_btn.config(state="disabled")
-        self.log("正在核对第 1–17 届真题来源及访问限制；默认只建立索引，不批量保存 PDF。", "[TIP]")
-
-        def load_index():
-            try:
-                report = open_source_index(log=lambda message: self.log(message, "[SOURCE]"))
-                webbrowser.open(report.as_uri())
-            except (OSError, ValueError, RuntimeError) as error:
-                self.log(f"来源索引未完成：{error}", "[ERR]")
-            finally:
-                self.ui(self.open_sources_btn.config, state="normal")
-
-        threading.Thread(target=load_index, daemon=True).start()
-
     def toggle_task_mode(self, *args):
         practice = self.mode_var.get() == "练习"
         subject = self.subject_var.get()
@@ -354,10 +328,6 @@ class CourseApp:
             button.config(fg="#00ffcc" if self.mode_var.get() == value else "#8494aa")
         self.task_badge.config(text="PRACTICE" if practice else "SUMMARY")
         self.set_busy(self.busy)
-        if practice and competition:
-            self.source_frame.pack(fill="x", pady=(8, 0), before=self.resource_tip)
-        else:
-            self.source_frame.pack_forget()
         if practice:
             count_hint = "5 填空、5 解答" if competition else "5 填空、5 选择、4 解答"
             fallback = "竞赛真题与开放参考" if competition else "MIT OCW"

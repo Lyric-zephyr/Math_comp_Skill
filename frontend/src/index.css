@@ -22,7 +22,8 @@ body { margin: 0; min-width: 320px; font-size: var(--text-base); }
 button, summary { cursor: pointer; }
 select, input { width: 100%; min-width: 0; height: 44px; padding: 0 12px; background: white; border: 1px solid #dce3ed; border-radius: 8px; color: #263750; outline: none; }
 select:focus-visible, input:focus-visible { border-color: #3b82f6; box-shadow: 0 0 0 3px #dbeafe; }
-label { display: block; font-size: 15px; font-weight: 600; color: #536179; margin-bottom: 8px; }
+label, legend, .field-label { font-size: 15px; font-weight: 600; color: #536179; }
+label, legend { display: block; margin-bottom: 8px; }
 .card { border: 1px solid #e3e8f0; border-radius: 16px; background: white; box-shadow: 0 3px 14px #20355b03; }
 .eyebrow { color: #8995a8; font-size: 12px; letter-spacing: .15em; font-weight: 600; }
 .hint { color: #77859a; font-size: 14px; line-height: 1.8; }

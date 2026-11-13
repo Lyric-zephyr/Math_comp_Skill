@@ -43,6 +43,54 @@ def normalize_math_blanks(content):
     return transform_math(content, lambda text: re.sub(r"(?<!\\)_{2,}", lambda _: r"\underline{\qquad\qquad}", text))
 
 
+def _emphasize_summary(text, protected):
+    """补齐总结正文遗漏的重点标记，只添加 **，不改文字或公式。"""
+    if not re.search(r"(?m)^#{2,3}[ \t]+[一二]、(?:知识梳理|易错总结)", text):
+        return text
+    target = 2
+
+    def section(match):
+        nonlocal target
+        heading, body = match[1], match[2]
+        if "知识梳理" in heading:
+            target = 2
+        elif "易错总结" in heading:
+            target = 1
+        existing = list(re.finditer(r"\*\*([^*\n]+)\*\*", body))
+        highlighted = sum(max(1, len(re.findall(r"[。；！？]", mark[1])) + (mark[1][-1] not in "。；！？")) for mark in existing)
+        needed = max(0, target - highlighted)
+        candidates = []
+        for clause in re.finditer(r"(?m)(?:^|(?<=[。；！？]))([^\n。；！？]+[。；！？]?)", body):
+            start = clause.start(1) + len(clause[1]) - len(clause[1].lstrip())
+            for mark in existing:
+                if mark.start() <= start < mark.end():
+                    start = mark.end()
+            value = body[start:clause.end(1)].strip()
+            if (not 6 <= len(re.findall(r"[\u4e00-\u9fff]", value)) <= 100
+                    or "*" in value or value.startswith(("|", ">", "- ", "+ "))):
+                continue
+            tokens = re.findall(r"\x00(\d+)\x00", value)
+            if any(protected[int(index)].startswith(("`", "~~~", "$$", r"\[")) for index in tokens):
+                continue
+            score = 3 * sum(word in value for word in ("必须", "不能", "当且仅当", "充要", "未必", "不一定", "只有"))
+            score += sum(word in value for word in ("前提", "定义", "条件", "应先", "优先", "注意"))
+            start += len(body[start:clause.end(1)]) - len(body[start:clause.end(1)].lstrip())
+            candidates.append((score, start, start + len(value.rstrip("。；！？"))))
+        chosen = sorted(candidates, key=lambda item: (-item[0], item[1]))[:needed]
+        for _, start, end in sorted(chosen, key=lambda item: item[1], reverse=True):
+            body = body[:start] + "**" + body[start:end] + "**" + body[end:]
+        if chosen:
+            # 相邻重点合并，避免 **** 被 Markdown 解析成错误的强调边界。
+            while True:
+                merged = re.sub(r"\*\*([^*\n]+)\*\*\*\*([^*\n]+)\*\*", r"**\1\2**", body)
+                if merged == body:
+                    break
+                body = merged
+        return heading + body
+
+    return re.sub(r"(?m)(^#{1,6}[ \t]+[^\n]*(?:\n|$))([\s\S]*?)(?=^#{1,6}[ \t]|\Z)", section, text)
+
+
 def normalize_document(content):
     """规范排版标记与选项分段，保留公式和代码原文。"""
     protected = []
@@ -62,6 +110,9 @@ def normalize_document(content):
     # 每项成为独立自然段；全角句点避免 Pandoc 把 A. 识别为字母列表。
     text = re.sub(r"(?m)^[ \t]*([A-D])(?:\\?\.|[．、)）])[ \t]*", r"\n\n\1． ", text)
     text = re.sub(r"\n{3,}", "\n\n", text)
+    # 中文句末标点留在粗体外，避免 **重点。**下一句 被 Markdown 当成普通文字。
+    text = re.sub(r"\*\*([^*\n]*[^\s*，。；：！？、,.!?;:])([，。；：！？、,.!?;:]+)\*\*", r"**\1**\2", text)
+    text = _emphasize_summary(text, protected)
     return re.sub(r"\x00(\d+)\x00", lambda match: protected[int(match[1])], text)
 
 
