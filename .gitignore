@@ -2,8 +2,16 @@
 *.pdf
 local_textbook/*
 !local_textbook/.gitkeep
-local_problems/
-local_practice/
+!local_textbook/.ocr-cache/
+local_textbook/.ocr-cache/*
+!local_textbook/.ocr-cache/.gitkeep
+local_problems/*
+!local_problems/.gitkeep
+local_practice/*
+!local_practice/.gitkeep
+!local_practice/Complex_Analysis/
+local_practice/Complex_Analysis/*
+!local_practice/Complex_Analysis/.gitkeep
 output/*
 !output/.gitkeep
 
@@ -52,7 +60,11 @@ Desktop.ini
 
 # Temporary browser and OCR workspaces
 .pdf-export-*/
+.document-export-*/
+.*.export-lock/
 .ocr-*/
+!local_textbook/.ocr-cache/
+!local_textbook/.ocr-cache/.gitkeep
 
 # Web frontend
 node_modules/

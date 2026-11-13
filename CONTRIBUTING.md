@@ -63,22 +63,19 @@ uploading a complete textbook or competition paper.
 - Exclude `output/`, `local_textbook/`, `local_problems/`, `local_practice/`, credentials, and build
   artifacts from commits and release archives.
 
-Before submitting, run the backend tests and frontend build/browser tests:
+Before submitting, check the command-line entry point and frontend build:
 
 ```sh
-python -m pip install -r requirements-dev.txt
-python -m pytest -q
+python main.py --help
 npm --prefix frontend run build
-npm --prefix frontend exec -- playwright install chromium
-npm --prefix frontend test
 ```
 
 Check the changed behavior with a small example. Do not use
 paid API calls just to check documentation or formatting changes. Mention what
 you checked and any unavailable account or platform in the pull request.
 
-GitHub Actions checks Python syntax, bundled JSON, and CLI `--help` on Windows
-and Linux. It does not sign in, install system tools, fetch papers, call an AI,
+GitHub Actions checks Python syntax and CLI `--help` on Windows and Linux,
+and builds the frontend. It does not sign in, install system tools, fetch papers, call an AI,
 or verify generated mathematics. A passing check does not replace testing the
 behavior you changed.
 

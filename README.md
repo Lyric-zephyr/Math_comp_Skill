@@ -43,6 +43,9 @@ No API key, textbook, or browser session is included in the repository.
 6. Click **开始生成** to generate your document.
 
 Files are saved in `output/` and open automatically when generation succeeds.
+Repeated generations keep earlier files and use numbered names such as
+`practice.pdf`, `practice_2.pdf`, and `practice_3.pdf`. The same protection
+applies to all output formats and Markdown recovery files.
 Use **输出文件夹 (Open output folder)** to find them later.
 
 **No textbook is required.** If you provide one, relevant excerpts take
@@ -103,15 +106,10 @@ It shares the same generation and environment-setup service. It requires Tkinter
 To validate without AI calls:
 
 ```sh
-python -m pip install -r requirements-dev.txt
-python -m pytest -q
+python main.py --help
 npm --prefix frontend run build
-npm --prefix frontend exec -- playwright install chromium
-npm --prefix frontend test
 ```
 
-Browser tests use a temporary simulated backend, never your textbooks or keys.
-On Windows they use installed Edge; on Linux they use Playwright Chromium.
 Create a distributable source ZIP including built assets with
 `python scripts/package_release.py`; it packages committed sources and the current
 frontend build, excluding local study data. Commit source changes before packaging.
@@ -355,10 +353,10 @@ with page progress shown in the UI and log.
 
 Successful recognition is saved locally in `local_textbook/.ocr-cache/`, which
 is covered by the existing Git ignore rule. Later runs hash the current PDF
-with SHA-256 and check the extractor/OCR script versions and PyMuPDF version;
+with SHA-256 and check the cached text's integrity;
 unchanged files reuse their text without repeating extraction or OCR. Renaming
-the same PDF does not invalidate its cache. Changed content, changed extraction
-tools, or damaged/incomplete cache data cause recognition to run again. Password
+the same PDF or updating extraction tools does not invalidate its cache. Changed
+PDF content or damaged/incomplete cache data cause recognition to run again. Password
 and copy restrictions are checked before reading a cache. Only successful,
 nonempty results are saved, using an atomic file replacement; failed cache
 writes do not block the current run. Temporary page images are cleaned up.

@@ -1,6 +1,8 @@
 """Save one selected document format using the shared rendering tools."""
 
 import base64
+from contextlib import contextmanager
+from itertools import count
 import json
 import os
 from pathlib import Path
@@ -110,7 +112,33 @@ def _format_word(path, practice):
     formatted.replace(path)
 
 
+@contextmanager
+def _unused_prefix(filename_prefix):
+    """Reserve a document name across formats and concurrent export processes."""
+    original = Path(filename_prefix).expanduser().resolve()
+    original.parent.mkdir(parents=True, exist_ok=True)
+    for number in count(1):
+        prefix = original if number == 1 else original.with_name(f"{original.name}_{number}")
+        reservation = prefix.with_name(f".{prefix.name}.export-lock")
+        try:
+            reservation.mkdir()
+        except FileExistsError:
+            continue
+        try:
+            if any(Path(f"{prefix}.{extension}").exists() for extension in ("md", "pdf", "html", "docx")):
+                continue
+            yield prefix
+            return
+        finally:
+            reservation.rmdir()
+
+
 def save_document(content, filename_prefix, output_format="pdf", pdf_engine="browser", repair=None):
+    with _unused_prefix(filename_prefix) as prefix:
+        return _save_document(content, prefix, output_format, pdf_engine, repair)
+
+
+def _save_document(content, filename_prefix, output_format="pdf", pdf_engine="browser", repair=None):
     check_output_environment(output_format, pdf_engine)
     normalized = normalize_math_blanks(content)
     if normalized != content:

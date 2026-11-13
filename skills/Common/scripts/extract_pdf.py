@@ -50,18 +50,14 @@ def extract_text(pdf_path, log=None, use_cache=True, refresh=False, cache_dir=No
             raise ValueError("PDF 已加密，请先解密再提取。")
         if not document.permissions & fitz.PDF_PERM_COPY:
             raise ValueError("PDF 限制复制，停止自动提取；请使用有权提取的教材。")
-        # 以文件内容及提取流程为依据；改名可复用，同名内容变化不能误用旧结果。
+        # 同一 PDF 始终复用完整缓存；工具升级不触发重扫，需重识别时显式 --refresh。
         source_digest = _file_digest(pdf_path) if use_cache else None
-        pipeline = hashlib.sha256((
-            _file_digest(Path(__file__)) + _file_digest(Path(__file__).with_name("ocr_windows.ps1"))
-            + fitz.VersionBind + os.name
-        ).encode("utf-8")).hexdigest() if use_cache else None
         cache = Path(cache_dir or CACHE_DIR) / f"{source_digest}.json"
         if use_cache and not refresh and cache.is_file():
             try:
                 saved = json.loads(cache.read_text(encoding="utf-8"))
                 if (not isinstance(saved, dict) or saved.get("version") != 1
-                        or saved.get("source_sha256") != source_digest or saved.get("pipeline") != pipeline
+                        or saved.get("source_sha256") != source_digest
                         or saved.get("pages") != len(document) or not isinstance(saved.get("text"), str)
                         or not saved["text"].strip()
                         or saved.get("text_sha256") != hashlib.sha256(saved["text"].encode("utf-8")).hexdigest()):
@@ -120,7 +116,7 @@ def extract_text(pdf_path, log=None, use_cache=True, refresh=False, cache_dir=No
                 raise RuntimeError("教材在识别过程中发生变化，请重试；未保存本次识别缓存。")
             report_progress(95, "保存教材识别缓存", log)
             try:
-                _save_cache(cache, {"version": 1, "source_sha256": source_digest, "pipeline": pipeline,
+                _save_cache(cache, {"version": 1, "source_sha256": source_digest,
                                     "pages": len(document), "text": text,
                                     "text_sha256": hashlib.sha256(text.encode("utf-8")).hexdigest()})
                 log(f"教材识别缓存已保存：{cache}")
