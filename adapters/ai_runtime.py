@@ -251,8 +251,9 @@ def _generate_summary(chapter, prompt, generate, progress=None):
 
 def _generate_summary_part(prompt, heading, generate, scope=""):
     instruction = (f"\n\n【分段执行】本轮仅输出 `## {heading}` 及其内容，不输出总标题、目录或其他大节。"
-                   "第一原则全面，第二原则简洁突出重点。保留定义、条件和重要结论，减少文字解释，"
-                   "合并同义公式与非必要中间式，不用文字重述公式。重点公式就地用\\boxed，重要语句用**加粗**。"
+                   "第一原则全面，第二原则简洁突出重点。保留定义、条件和重要结论，按共用精炼规则压缩冗余叙述，"
+                   "合并同义公式与非必要中间式，不用文字重述公式。重点公式就地用\\boxed，"
+                   "正文关键结论、适用条件和方法判断句充分用**加粗**，不只加粗标题或术语，不整段加粗。"
                    "独立公式用$$并空行分隔，正文首行缩进由模板处理。\n" + scope)
     for attempt in range(2):
         try:
