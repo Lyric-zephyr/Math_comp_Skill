@@ -10,7 +10,7 @@ from pathlib import Path
 from adapters.document_export import check_output_environment, save_document
 from adapters.setup_environment import configure_environment, configure_ai, refresh_path
 from adapters.ai_runtime import API_SETTINGS
-from adapters.skill_rules import MODULE_RULES, build_prompt
+from adapters.skill_rules import ALL_MODULE_RULES, SUBJECT_MODULES, batch_chapters, build_prompt
 from adapters.task_progress import parse_progress
 from adapters.problem_sources import open_source_index
 
@@ -126,8 +126,13 @@ class TaskService:
                 raise RuntimeError("配置未完成，请查看错误日志")
 
     def execute(self, settings, kind="generate"):
-        if kind != "setup" and settings.get("subject", SUBJECTS[0]) != SUBJECTS[0]:
-            raise ValueError("复变函数生成尚未接入，请切换数学竞赛使用现有功能。")
+        subject = settings.get("subject", SUBJECTS[0])
+        if subject not in SUBJECT_MODULES:
+            raise ValueError("未知科目。")
+        if kind == "sources" and (subject != "数学竞赛" or settings["mode"] != "练习"):
+            raise ValueError("竞赛真题来源仅用于数学竞赛练习。")
+        if kind == "generate" and settings["chapter"] not in (*SUBJECT_MODULES[subject], "all"):
+            raise ValueError("模块与所选科目不匹配。")
         self.percent = 0
         if kind == "setup":
             self.setup(settings)
@@ -140,7 +145,7 @@ class TaskService:
             webbrowser.open(report.as_uri())
             self.progress(100, "来源索引完成")
             return 1, 1
-        chapters = list(MODULE_RULES)[:6 if settings["mode"] == "总结知识点" else 7] if settings["chapter"] == "all" else [settings["chapter"]]
+        chapters = batch_chapters(subject, settings["mode"]) if settings["chapter"] == "all" else [settings["chapter"]]
         return self.run_all_tasks(settings["ai"], settings["mode"], chapters, settings["model"], settings["pdf_engine"], settings["run_mode"], settings.get("api_key", ""), settings["output_format"])
 
     def run_all_tasks(self, ai, mode, chapters, model_name, pdf_engine="browser", run_mode="CLI", api_key="", output_format="pdf"):
@@ -156,7 +161,7 @@ class TaskService:
             output_dir = os.path.join(BASE_DIR, "output")
             os.makedirs(output_dir, exist_ok=True)
             textbook_files = sorted(glob.glob(os.path.join(BASE_DIR, "local_textbook", "*.pdf")))
-            extract_script = os.path.join(BASE_DIR, "skills", "math-comp-prep", "scripts", "extract_pdf.py")
+            extract_script = os.path.join(BASE_DIR, "skills", "Common", "scripts", "extract_pdf.py")
             env = os.environ.copy()
             env["PYTHONIOENCODING"] = "utf-8"
 
@@ -196,7 +201,7 @@ class TaskService:
                     self.progress(5 + 20 * (book_index + 1) / len(textbook_files), "教材读取阶段完成")
             self.progress(25, "准备生成正文")
             if not textbook_texts:
-                self.log("没有可用的教材文本，AI 将基于自身知识生成。", "[WARN]")
+                self.log("没有可用的用户教材文本，将在线读取 GitHub Assistant_course 对应资料；不足部分由 AI 知识补齐。", "[WARN]")
 
             for i, chap in enumerate(chapters):
                 if self.stopping:
@@ -206,7 +211,7 @@ class TaskService:
                 self.progress(task_start, f"模块 {i + 1}/{total} · 整理参考资料")
                 self.log(f"队列进度 [{i+1}/{total}] 开始处理: {chap}", "[QUEUE]")
                 try:
-                    keywords = MODULE_RULES[chap][1]
+                    keywords = ALL_MODULE_RULES[chap][1]
                     references = []
                     budget = 20000 // max(len(textbook_texts), 1)
                     for pdf_path, text in textbook_texts.items():
@@ -226,7 +231,7 @@ class TaskService:
                         self.log(f"未找到与 {chap} 匹配的教材片段。", "[WARN]")
                     prompt = build_prompt(mode, chap, prompt_context, log=lambda message: self.log(message, "[SOURCE]" if mode == "练习" else "[RULE]"))
                     safe_name = f"{mode}_{chap}".replace("：", "_").replace(" ", "")
-                    cmd = [sys.executable, "-u", AI_ADAPTERS[ai], prompt, os.path.join(output_dir, safe_name)]
+                    cmd = [sys.executable, "-u", AI_ADAPTERS[ai], "", os.path.join(output_dir, safe_name)]
                     if ai == "GPT (Codex)" and run_mode == "CLI":
                         cmd.append(model_name)
                     cmd.extend(["--pdf-engine", pdf_engine, "--run-mode", run_mode, "--output-format", output_format])
@@ -235,19 +240,23 @@ class TaskService:
                         cmd.extend(["--api-model", model_name])
                         if api_key:
                             adapter_env["MATH_COMP_API_KEY"] = api_key
-                    with self.popen(
-                        cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-                        text=True, encoding="utf-8", errors="replace", env=adapter_env, cwd=BASE_DIR,
-                    ) as process:
-                        for line in process.stdout:
-                            progress = parse_progress(line)
-                            if progress:
-                                value, stage = progress
-                                self.progress(task_start + task_share * value / 100,
-                                        f"模块 {i + 1}/{total} · {stage}")
-                            elif not self.artifact_line(line, chap):
-                                self.log(line.rstrip())
-                        return_code = process.wait()
+                    with tempfile.TemporaryDirectory(prefix="course-skill-prompt-") as request_dir:
+                        prompt_file = Path(request_dir) / "prompt.txt"
+                        prompt_file.write_text(prompt, encoding="utf-8")
+                        cmd.extend(["--prompt-file", str(prompt_file)])
+                        with self.popen(
+                            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            text=True, encoding="utf-8", errors="replace", env=adapter_env, cwd=BASE_DIR,
+                        ) as process:
+                            for line in process.stdout:
+                                progress = parse_progress(line)
+                                if progress:
+                                    value, stage = progress
+                                    self.progress(task_start + task_share * value / 100,
+                                            f"模块 {i + 1}/{total} · {stage}")
+                                elif not self.artifact_line(line, chap):
+                                    self.log(line.rstrip())
+                            return_code = process.wait()
                     self.emit("module", {"chapter": chap, "status": "failed" if return_code else "succeeded"})
                     if return_code:
                         self.log(f"失败: {chap}（退出码 {return_code}）", "[ERR]")

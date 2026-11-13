@@ -10,10 +10,10 @@ import urllib.error
 import urllib.request
 
 if __package__:
-    from .skill_rules import MODULE_RULES, build_prompt
+    from .skill_rules import ALL_MODULE_RULES, SUBJECT_MODULES, SUMMARY_TOPICS, subject_for_chapter, build_prompt
     from .task_progress import report_progress
 else:
-    from skill_rules import MODULE_RULES, build_prompt
+    from skill_rules import ALL_MODULE_RULES, SUBJECT_MODULES, SUMMARY_TOPICS, subject_for_chapter, build_prompt
     from task_progress import report_progress
 
 
@@ -83,8 +83,9 @@ def add_runtime_arguments(parser, provider):
     parser.add_argument("--run-mode", choices=RUN_MODES[provider], default=defaults[provider])
     parser.add_argument("--api-model", help="API 模型 ID；豆包也可填写推理接入点 ID")
     parser.add_argument("--timeout", type=int, default=1200, help="等待 AI 完成的最长秒数")
+    parser.add_argument("--prompt-file", type=Path, help="读取 UTF-8 提示词文件，避免命令行长度限制")
     parser.add_argument("--task-mode", choices=("summary", "practice"), help="为直接运行适配器加载对应 skill 规则")
-    parser.add_argument("--chapter", choices=tuple(MODULE_RULES), help="与 --task-mode 一起指定模块")
+    parser.add_argument("--chapter", choices=tuple(ALL_MODULE_RULES), help="与 --task-mode 一起指定模块")
 
 
 def _message_text(content):
@@ -154,6 +155,8 @@ def generate_api(provider, prompt, model=None, timeout=1200):
 
 
 def generate_content(provider, args, base_dir):
+    if getattr(args, "prompt_file", None):
+        args.prompt = args.prompt_file.read_text(encoding="utf-8-sig")
     if args.run_mode not in RUN_MODES[provider]:
         raise ValueError("该平台不支持所选运行方式。")
     if args.timeout <= 0:
@@ -169,7 +172,7 @@ def generate_content(provider, args, base_dir):
     if summary:
         match = re.search(r"章节：【([^】]+)】", args.prompt[:512])
         chapter = args.chapter or (match[1] if match else None)
-        if chapter not in MODULE_RULES:
+        if chapter not in ALL_MODULE_RULES:
             raise ValueError("知识点总结需要有效模块。")
         return _generate_summary(chapter, args.prompt,
                                  lambda prompt: _generate_once(provider, args, base_dir, prompt))
@@ -183,7 +186,7 @@ def generate_content(provider, args, base_dir):
         if not chapter:
             match = re.search(r"章节：【([^】]+)】", args.prompt[:512])
             chapter = match[1] if match else None
-        if chapter not in MODULE_RULES:
+        if chapter not in ALL_MODULE_RULES:
             raise ValueError("练习避重需要有效模块；直接调用请同时提供 --task-mode practice 和 --chapter。")
         return generate_practice(chapter, args.prompt,
                                  lambda prompt: _generate_once(provider, args, base_dir, prompt),
@@ -194,10 +197,10 @@ def generate_content(provider, args, base_dir):
 
 
 def _generate_summary(chapter, prompt, generate, progress=None):
-    """分段展开，综合总结直接合并六模块全文，避免一次回答压缩全部内容。"""
-    chapters = list(MODULE_RULES)
+    """Generate disjoint subject topics, then one concise error section per module."""
+    chapters = list(SUBJECT_MODULES[subject_for_chapter(chapter)])
     if progress is None:
-        total_parts = 19 if chapter == chapters[-1] else 3
+        total_parts = sum(len(SUMMARY_TOPICS[c]) + 1 for c in chapters[:-1]) + 1 if chapter == chapters[-1] else len(SUMMARY_TOPICS[chapter]) + 1
         completed = 0
 
         def progress(stage):
@@ -206,38 +209,51 @@ def _generate_summary(chapter, prompt, generate, progress=None):
             report_progress(5 + 80 * completed / total_parts, f"总结分段完成 {completed}/{total_parts} · {stage}")
 
     if chapter == chapters[-1]:
-        context = prompt.partition("【参考资料】\n")[2]
+        # Rebuild each module's references without feeding the combined library back as user PDF.
+        context = prompt.partition("【用户 PDF 教材（最高优先）】\n")[2].partition("\n\n【Assistant_course 课程库（次优先）】")[0]
         parts = []
         for current in chapters[:-1]:
             print(f"[*] 综合总结：正在完整整理 {current}", flush=True)
             body = _generate_summary(current, build_prompt("总结知识点", current, context), generate, progress)
             body = re.sub(r"(?m)^(#{2,5})(?=\s)", r"#\1", body)
             parts.append(f"## {current}\n\n{body}")
-        # 跨章节联系另外生成，不以概览替代六模块正文。
-        parts.append(_generate_summary_part(prompt, "跨章节联系与适用条件", generate))
-        progress("跨章节联系与适用条件")
+        parts.append(_generate_summary_part(prompt, "跨模块联系与方法选择", generate,
+                     "仅写前述模块之间的新联系及方法选择，不重列定义、公式或易错清单。"))
+        progress("跨模块联系")
         return "\n\n".join(parts) + "\n"
-    parts = []
-    for heading in ("一、基础公式", "二、核心定理", "三、竞赛拓展结论"):
-        print(f"[*] 知识点总结分段生成：{chapter} / {heading}", flush=True)
-        parts.append(_generate_summary_part(prompt, heading, generate))
-        progress(heading)
-    return "\n\n".join(parts) + "\n"
+
+    parts, covered = [], []
+    for topics in SUMMARY_TOPICS[chapter]:
+        print(f"[*] 知识点总结：{chapter} / {topics}", flush=True)
+        instruction = (f"本轮只覆盖这些互相关联的主题：{topics}。定义、公式、定理、条件、方法就地整合，"
+                       "不另写基础/核心/拓展重复部分，不输出易错总结。"
+                       "使用 ### 编号小标题和简短自然段，不用圆点列表。"
+                       "前轮已完成的主题如下，不得重述；需要衔接只作简短指代：\n" + "\n".join(covered))
+        body = _generate_summary_part(prompt, "一、知识梳理", generate, instruction)
+        parts.append(re.sub(r"\A##[^\n]*\n+", "", body))
+        covered.extend(re.findall(r"(?m)^#{3,4}[ \t]+(.+)$", body))
+        progress(topics)
+    # Renumber subheadings across the generated topic groups.
+    number = 0
+
+    def renumber(match):
+        nonlocal number
+        number += 1
+        return f"### {number}. {match[1]}"
+
+    body = re.sub(r"(?m)^###[ \t]+(?:\d+[.、．][ \t]*)?(.+)$", renumber, "\n\n".join(parts))
+    errors = _generate_summary_part(prompt, "二、易错总结", generate,
+                "仅输出本模块 7–10 条易错提醒；每条用 ### 编号短小标题和一句凝练说明。"
+                "不重新展开定义或整套公式。已覆盖主题：\n" + "\n".join(covered))
+    progress("易错总结")
+    return f"## 一、知识梳理\n\n{body}\n\n{errors}\n"
 
 
-def _generate_summary_part(prompt, heading, generate):
-    instruction = (f"\n\n【分段执行】各部分由程序分别生成再合并。本轮仅输出 `## {heading}` 及其全部内容，"
-                   "不输出总标题、目录或其他部分。第一原则是全面，第二原则是在完整覆盖的前提下尽可能简洁并突出重点。"
-                   "覆盖子知识点、符号含义、成立条件、方法选择和易错点，不遗漏关键条件或例外；"
-                   "以公式、成立条件和关键结论为主，只补充必要的短句，减少文字解释和叙述；"
-                   "公式已表达的内容不再用文字复述，省去非必要推导、重复说明与铺垫。"
-                   "小标题下采用公式配简短自然段，不使用圆点项目列表，不机械编号或刻意分条，"
-                   "不统一套用‘关键词：解释’格式，随内容自然换段。"
-                   "合并重复、同义变形和非必要中间式，公式数量约减少五分之一，保留定义式、关键结论及条件；"
-                   "不要把省略公式改成长文字。按重要程度增加公式框选，全模块通常6–8个，不重复框选或为凑数框选。"
-                   "独立公式用$$包裹，与文字空行分隔并居中；正文段落由模板统一首行缩进两个汉字。"
-                   "重要定义、条件、结论及易错语句用**加粗**，不限定每节只能加粗几处。"
-                   "保持编号小标题及正文重点加粗；不按教材字数或页数凑篇幅，也不能为求短省掉知识点。")
+def _generate_summary_part(prompt, heading, generate, scope=""):
+    instruction = (f"\n\n【分段执行】本轮仅输出 `## {heading}` 及其内容，不输出总标题、目录或其他大节。"
+                   "第一原则全面，第二原则简洁突出重点。保留定义、条件和重要结论，减少文字解释，"
+                   "合并同义公式与非必要中间式，不用文字重述公式。重点公式就地用\\boxed，重要语句用**加粗**。"
+                   "独立公式用$$并空行分隔，正文首行缩进由模板处理。\n" + scope)
     for attempt in range(2):
         try:
             body = generate(prompt + instruction).strip()
@@ -249,6 +265,8 @@ def _generate_summary_part(prompt, heading, generate):
                 raise RuntimeError(f"知识点分段结构不正确，应只包含：{heading}。")
             if not headings:
                 body = f"## {heading}\n\n{body}"
+            if heading == "二、易错总结" and not 7 <= len(re.findall(r"(?m)^###[ \t]+", body)) <= 10:
+                raise RuntimeError("易错总结应包含 7–10 条编号小标题及简短提醒。")
             return body
         except (RuntimeError, subprocess.TimeoutExpired):
             if attempt:

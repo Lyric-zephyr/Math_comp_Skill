@@ -20,7 +20,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from adapters.ai_runtime import API_SETTINGS, RUN_MODES, api_model, list_api_models, validate_api_configuration
-from adapters.skill_rules import MODULE_RULES
+from adapters.skill_rules import MODULE_RULES, SUBJECT_MODULES, batch_chapters
 from launcher.task_service import AI_PROVIDERS, BASE_DIR, SUBJECTS, TaskService
 
 DEFAULTS = {"subject": SUBJECTS[0], "ai": "GPT (Codex)", "run_mode": "CLI", "model": "gpt-6.1-sol", "mode": "总结知识点", "chapter": next(iter(MODULE_RULES)), "output_format": "pdf", "pdf_engine": "browser"}
@@ -81,7 +81,7 @@ class Manager:
             raise HTTPException(422, "不支持的科目")
         if ai not in AI_PROVIDERS or data["run_mode"] not in RUN_MODES[AI_PROVIDERS[ai]]:
             raise HTTPException(422, "不支持的 AI 服务或运行方式")
-        if data["mode"] not in ("总结知识点", "练习") or data["chapter"] not in (*MODULE_RULES, "all"):
+        if data["mode"] not in ("总结知识点", "练习") or data["chapter"] not in (*SUBJECT_MODULES[data["subject"]], "all"):
             raise HTTPException(422, "无效任务或模块")
         if data["output_format"] not in ("word", "pdf", "md", "html") or data["pdf_engine"] not in ("browser", "latex"):
             raise HTTPException(422, "无效输出格式或引擎")
@@ -141,17 +141,15 @@ class Manager:
         if kind not in ("generate", "setup", "sources"):
             raise HTTPException(422, "无效操作")
         settings = self.settings(raw, validate=kind != "sources")
-        if kind != "setup" and settings["subject"] != SUBJECTS[0]:
-            raise HTTPException(422, "复变函数生成尚未接入，请切换数学竞赛使用现有功能。")
-        if kind == "sources" and settings["mode"] != "练习":
-            raise HTTPException(422, "真题来源仅用于题目练习")
+        if kind == "sources" and (settings["subject"] != "数学竞赛" or settings["mode"] != "练习"):
+            raise HTTPException(422, "竞赛真题来源仅用于数学竞赛练习")
         with self.lock:
             if self.closed:
                 raise HTTPException(503, "服务正在退出")
             if self.current and self.jobs[self.current]["status"] not in TERMINAL:
                 raise HTTPException(409, "已有任务正在执行")
             job_id = uuid.uuid4().hex
-            chapters = (list(MODULE_RULES)[:6 if settings["mode"] == "总结知识点" else 7] if settings["chapter"] == "all" else [settings["chapter"]]) if kind == "generate" else []
+            chapters = (batch_chapters(settings["subject"], settings["mode"]) if settings["chapter"] == "all" else [settings["chapter"]]) if kind == "generate" else []
             self.jobs[job_id] = {"id": job_id, "kind": kind, "status": "waiting", "percent": 0, "stage": "等待执行", "successes": 0, "failures": 0, "modules": {chapter: "waiting" for chapter in chapters}, "logs": [], "artifacts": [], "sequence": 0, "events": deque(maxlen=self.event_limit)}
             self.current = job_id
             thread = threading.Thread(target=self.run, args=(job_id, kind, copy.deepcopy(settings)), daemon=True)
@@ -265,7 +263,7 @@ def create_app(port, token=None, manager=None, dist=None):
     def options():
         with manager.lock:
             configured = {ai: bool(manager.credentials.get(provider) or os.environ.get(API_SETTINGS[provider][0])) for ai, provider in AI_PROVIDERS.items()}
-        return {"subjects": list(SUBJECTS), "providers": {ai: list(RUN_MODES[provider]) for ai, provider in AI_PROVIDERS.items()}, "modules": list(MODULE_RULES), "defaults": DEFAULTS, "api_defaults": {ai: (os.environ.get("OPENAI_MODEL", "") if provider == "codex" else api_model(provider)) for ai, provider in AI_PROVIDERS.items()}, "configured": configured, "cli_models": ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-5.2"]}
+        return {"subjects": list(SUBJECTS), "providers": {ai: list(RUN_MODES[provider]) for ai, provider in AI_PROVIDERS.items()}, "modules": list(MODULE_RULES), "subject_modules": {subject: list(modules) for subject, modules in SUBJECT_MODULES.items()}, "batch_counts": {subject: {mode: len(batch_chapters(subject, mode)) for mode in ("总结知识点", "练习")} for subject in SUBJECTS}, "defaults": DEFAULTS, "api_defaults": {ai: (os.environ.get("OPENAI_MODEL", "") if provider == "codex" else api_model(provider)) for ai, provider in AI_PROVIDERS.items()}, "configured": configured, "cli_models": ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-5.2"]}
 
     @app.put("/api/session/settings")
     def settings(raw: Settings):

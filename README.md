@@ -1,9 +1,9 @@
 # Course_Skill
 
 A desktop study workspace with a subject selector for **数学竞赛 (Mathematics
-Competition)** and **复变函数 (Complex Analysis)**. Mathematics Competition is
-fully available; Complex Analysis currently provides a UI entry only, with
-generation disabled until its subject rules and backend are connected.
+Competition)** and **复变函数 (Complex Analysis)**. Both subjects support
+knowledge summaries and practice papers, using shared formatting and separate
+subject rules and reference materials.
 Generate study notes or practice papers with your chosen AI, then save the
 result as **Word, PDF, Markdown, or HTML**.
 
@@ -31,9 +31,9 @@ No API key, textbook, or browser session is included in the repository.
    The launcher opens your browser after the server is ready. Release packages include
    the built frontend, so they do not need Node.js or the two `npm` commands.
 
-3. Under **科目 (Subject)**, select **数学竞赛 (Mathematics Competition)**.
-   Choose **知识点总结** for study notes or **题目练习** for questions and solutions,
-   then choose a module. **复变函数 (Complex Analysis)** is a UI preview only.
+3. Under **科目 (Subject)**, choose **数学竞赛 (Mathematics Competition)** or
+   **复变函数 (Complex Analysis)**. Choose **知识点总结** for study notes or
+   **题目练习** for questions and solutions, then choose a module.
 4. Open **设置** to choose an AI service and running method from the table below. For **API**,
    enter your key and model ID. Select **Word**, **PDF**, **MD**, or **HTML** under
    **输出格式**.
@@ -46,7 +46,8 @@ Files are saved in `output/` and open automatically when generation succeeds.
 Use **输出文件夹 (Open output folder)** to find them later.
 
 **No textbook is required.** If you provide one, relevant excerpts take
-priority. Otherwise, the AI generates notes from its own mathematics knowledge.
+priority, followed by the matching `Assistant_course/Course/` library. The AI
+fills remaining gaps from its own mathematics knowledge.
 
 ## Web workspace and development
 
@@ -178,13 +179,17 @@ affect automation. DeepSeek and Doubao use API only.
 
 | Task | Result | Reference behavior |
 | --- | --- | --- |
-| SUMMARY — 知识点总结 | Formulas, theorems, conditions, common mistakes, and extensions | Uses optional textbooks or the AI's own knowledge; does not retrieve past papers or question banks |
-| PRACTICE — 题目练习 | Two practice papers followed by answers and detailed solutions | Uses available past-paper references, a small bundled open collection, and optional textbooks |
+| SUMMARY — 知识点总结 | Formulas, theorems, conditions, common mistakes, and extensions | User PDF → matching Assistant_course Course library → AI knowledge; no past papers or question banks |
+| PRACTICE — 题目练习 | Two practice papers followed by answers and detailed solutions | Matching Assistant_course Practice library first; then subject-specific online references |
 
-Practice targets **non-mathematics A (非数学 A 类)**. Each paper contains
+Mathematics Competition practice targets **non-mathematics A (非数学 A 类)**. Each paper contains
 **five fill-in questions and five full-solution questions**, numbered **1–10
 independently**. Both papers appear before the answer section; solutions are
 grouped under separate first-paper and second-paper headings.
+
+Complex Analysis generates two papers of **5 fill-in, 5 single-choice, and
+4 full-solution questions**, numbered **1–14** per paper. Adapted questions are
+marked **改编** in their solutions; per-question source links are omitted.
 
 The app checks question counts, numbering, and section structure. This check
 does not verify mathematical correctness or guarantee competition difficulty.
@@ -203,7 +208,7 @@ even if subsequent document conversion fails. Earlier Markdown papers can be
 registered with:
 
 ```sh
-python skills/math-comp-prep/scripts/check_practice.py "paper.md" --chapter "模块一：极限与连续" --record
+python skills/Common/scripts/check_practice.py "paper.md" --chapter "模块一：极限与连续" --record
 ```
 
 Overwritten or unrecorded past papers cannot be reconstructed automatically.
@@ -220,6 +225,11 @@ Overwritten or unrecorded past papers cannot be reconstructed automatically.
 
 Choose **全部模块 (All modules)** to generate **six summaries** (modules 1–6)
 or **seven practice documents** (modules 1–7), depending on the task.
+Complex Analysis has eight selectable modules: complex numbers and functions;
+analytic functions and applications; complex integration; series; residues and
+applications; Fourier transforms; Laplace transforms; and comprehensive review.
+Its **All modules** option generates **seven documents** in either mode. The
+comprehensive module is selected individually.
 The current queue processes modules one at a time.
 
 The progress bar shows the whole workflow as a percentage: environment checks
@@ -241,10 +251,13 @@ Merge redundant formulas and omit unnecessary intermediate expressions, aiming
 for about 20% fewer formulas without losing essential coverage. Usually highlight
 6–8 important formulas per module with boxes and bold the key statements.
 There is no fixed word-count target or requirement to match a textbook's length.
-Each module is generated in three parts—formulas, theorems, and extensions—then combined.
-Only an unfinished part is retried once. Select module 7 separately for a complete
-compilation of modules 1–6 plus connections between them; it keeps all six modules'
-content rather than compressing it into a single short overview. This requires
+Summaries combine definitions, formulas, conditions and theorems by topic;
+they do not repeat a separate “core formulas” section. Important formulas are
+boxed where first introduced. Each ordinary module ends with **7–10 concise
+error reminders**. Disjoint topic groups and the final reminders are generated
+separately; an unfinished part is retried once. Select the comprehensive module
+for all ordinary modules plus new connections between them, without compressing
+them into a short overview. This requires
 more AI requests and may increase generation time and API charges. Coverage and
 mathematical accuracy still depend on the model and should be reviewed.
 
@@ -307,6 +320,33 @@ be installed manually. AI and output setup report their results separately.
 
 ## Optional textbooks and practice references
 
+The default shared library is the public
+[Assistant_course repository](https://github.com/Lyric-zephyr/Assistant_course).
+**Users do not need to clone or download a separate material pack.** The app
+reads the selected subject's index/manifest, fetches a few relevant Markdown/text
+files from GitHub, and sends excerpts to the chosen AI. Textbook indexes map
+chapters, sections and keywords to study modules, so the reader selects small
+relevant sections instead of fetching whole books. Originals remain in the
+material library for checking. All providers use the
+same reader; this does not depend on the model having browsing access.
+
+Summary reads only `Course/<subject>/`; practice prefers `Practice/<subject>/`,
+with MIT OCW as the Complex Analysis fallback. Requests have timeouts and size
+limits. Small, bounded caches live only in service memory, refreshing roughly
+every five minutes; remote materials are not saved to the project or disk.
+
+Practice catalogs group ordinary exercises by study module without duplicating
+the source questions. Past papers keep their original year, numbering and
+solutions; the AI can adapt relevant questions for chapter practice. Where
+available, source line ranges select matching questions, with paired solution
+files read alongside them. Topic tags are retrieval hints; adapted answers are
+recomputed and checked against the new question.
+
+If GitHub is unreachable or rate-limited, the app reports it and tries a sibling
+`Assistant_course/` folder before continuing with the subject's fallback sources.
+Set `COURSE_SKILL_LIBRARY` to explicitly use a local library instead. Missing
+online/local materials do not prevent generation.
+
 Click **教材文件夹 (Open textbook folder)** and place textbook PDFs in
 `local_textbook/`. The reader works with user-provided PDFs across textbooks
 and editions. Matching excerpts are sent to your chosen AI. On Windows, pages
@@ -327,7 +367,7 @@ Delete `local_textbook/.ocr-cache/` to clear all textbook memory, or force a
 single textbook to be recognized again:
 
 ```sh
-python skills/math-comp-prep/scripts/extract_pdf.py "textbook.pdf" --refresh --output textbook.txt
+python skills/Common/scripts/extract_pdf.py "textbook.pdf" --refresh --output textbook.txt
 ```
 
 Use `--no-cache` to skip both cache reads and writes for that command.
@@ -347,15 +387,18 @@ that every paper was downloaded or read successfully.
 
 The reader checks robots rules, redirects, login responses, and PDF password
 and copying restrictions. It reads permitted PDFs in memory by default.
-`local_problems/` holds the source index and OCR cache; it is runtime data,
+When explicitly using the source-index tool, `local_problems/` holds its report
+and OCR cache; it is runtime data,
 is recreated when needed, and is excluded from version control.
 
 If no usable official text is available, the prompt requires the output to be
-identified as unverified simulated practice. OCR can misread formulas. The app
-also includes a small attributed selection of **three MathNet problems** and
-**six MIT OCW problems**, rather than a complete competition bank.
+identified as unverified simulated practice. OCR can misread formulas. The separate
+Assistant_course repository also contains attributed selections of **three MathNet
+problems** and **six MIT OCW problems**. Course_Skill reads these online rather
+than bundling question content. Automatic official-source fallback uses a system
+temporary workspace for OCR and removes it afterward.
 
-See the [source-access notes](skills/math-comp-prep/references/source_access.md)
+See the [source-access notes](skills/Mathematics_Competition/references/source_access.md)
 for source availability and retrieval behavior.
 
 ## Troubleshooting
@@ -372,7 +415,7 @@ for source availability and retrieval behavior.
 | A textbook cannot be read | On Windows, let automatic OCR finish; if its language is unavailable, install Chinese OCR in Windows language settings. Elsewhere, OCR the PDF first. Summaries can also run without textbooks |
 | A formula fails to render | Use the reported Markdown line to fix the saved source, then export it again |
 | The output file is locked | Close the existing document in its viewer and retry export |
-| A practice paper has the wrong structure | Review the retained Markdown; the app preserves it rather than exporting an invalid layout |
+| A practice paper has the wrong structure | Structure errors trigger up to two retries; inspect retained Markdown if all three attempts fail |
 
 Transient browser failures are retried **once**, without another AI call.
 If conversion still fails, Markdown is preserved so you can recover the content.
@@ -393,14 +436,16 @@ GPT, DeepSeek, and Doubao share the same task and module rules.
 
 | File or directory | Purpose |
 | --- | --- |
-| [SKILL.md](skills/math-comp-prep/SKILL.md) | Task routing and shared requirements |
-| [knowledge_summary.md](skills/math-comp-prep/references/knowledge_summary.md) | Summary structure and formatting |
-| [problem_set.md](skills/math-comp-prep/references/problem_set.md) | Practice structure and difficulty requirements |
-| [references/modules/](skills/math-comp-prep/references/modules/) | Scope of each module |
-| [document.html](skills/math-comp-prep/assets/web/document.html) | Browser PDF/HTML typography |
-| [template.tex](skills/math-comp-prep/assets/template.tex) | XeLaTeX typography |
-| [format_practice.lua](skills/math-comp-prep/scripts/format_practice.lua) | Practice layout for LaTeX export |
-| [check_practice.py](skills/math-comp-prep/scripts/check_practice.py) | Check or register papers against per-module question history |
+| [Common](skills/Common/SKILL.md) | Shared formatting, material priority, summary and practice rules |
+| [Mathematics Competition](skills/Mathematics_Competition/SKILL.md) | Competition scope, question types and difficulty |
+| [Complex Analysis](skills/Complex_Analysis/SKILL.md) | Eight modules, transforms, and 14-question paper structure |
+| [knowledge_summary.md](skills/Common/references/knowledge_summary.md) | Summary structure and formatting |
+| [problem_set.md](skills/Mathematics_Competition/references/problem_set.md) | Practice structure and difficulty requirements |
+| [references/modules/](skills/Mathematics_Competition/references/modules/) | Scope of each module |
+| [document.html](skills/Common/assets/web/document.html) | Browser PDF/HTML typography |
+| [template.tex](skills/Common/assets/template.tex) | XeLaTeX typography |
+| [format_practice.lua](skills/Common/scripts/format_practice.lua) | Practice layout for LaTeX export |
+| [check_practice.py](skills/Common/scripts/check_practice.py) | Check or register papers against per-module question history |
 
 Rule changes affect new generations. Template changes affect newly exported
 documents; existing PDFs keep their layout until exported again.
@@ -451,14 +496,14 @@ the exporter, which fills in the document content.
 To refresh the past-paper source index:
 
 ```sh
-python skills/math-comp-prep/scripts/scrape_cmathc.py --refresh
+python skills/Mathematics_Competition/scripts/scrape_cmathc.py --refresh
 ```
 
 To attempt downloading every discovered, automatically accessible PDF from
 editions 1–17:
 
 ```sh
-python skills/math-comp-prep/scripts/scrape_cmathc.py --download-all
+python skills/Mathematics_Competition/scripts/scrape_cmathc.py --download-all
 ```
 
 The report lists restricted, missing, and failed sources.
@@ -473,7 +518,10 @@ Course_Skill/
 ├── frontend/                # React UI; dist/ is generated by the build
 ├── launcher/                # Shared task service, FastAPI and legacy interface
 ├── adapters/                # AI integrations, environment setup, exporters
-├── skills/math-comp-prep/   # Shared rules, scripts, templates, open references
+├── skills/
+│   ├── Common/              # Shared rules, extraction scripts and export templates
+│   ├── Mathematics_Competition/ # Competition modules and practice sources
+│   └── Complex_Analysis/    # Complex analysis and transform modules
 ├── local_textbook/          # Place textbook PDFs here; contents and OCR cache stay local
 ├── local_problems/          # Runtime reference cache; created when needed
 ├── local_practice/          # Per-module generated-question history; local only
@@ -489,7 +537,7 @@ in [requirements.txt](requirements.txt); one-click setup remains the recommended
 way to prepare your selected method and output format.
 
 GitHub issue and pull request templates are included. GitHub Actions checks
-Python syntax, bundled JSON, and CLI entry points on Windows and Linux without
+Python syntax and CLI entry points on Windows and Linux without
 calling AI services. Live accounts, GUI login, and document rendering require
 separate checks.
 

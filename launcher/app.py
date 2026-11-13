@@ -15,7 +15,7 @@ if BASE_DIR not in sys.path:
 
 from adapters.document_export import OUTPUT_FORMATS
 from adapters.ai_runtime import API_SETTINGS, RUN_MODES, api_model, list_api_models, validate_api_configuration
-from adapters.skill_rules import MODULE_RULES
+from adapters.skill_rules import MODULE_RULES, SUBJECT_MODULES, batch_chapters
 from adapters.problem_sources import open_source_index
 from launcher.task_service import SUBJECTS
 
@@ -341,33 +341,30 @@ class CourseApp:
 
     def toggle_task_mode(self, *args):
         practice = self.mode_var.get() == "练习"
-        competition = self.subject_var.get() == SUBJECTS[0]
-        self.chapters = ([f"全部模块（一键生成 {7 if practice else 6} 份）", *MODULE_RULES]
-                         if competition else ["复变函数（功能待接入）"])
-        self.chapter_menu.config(values=self.chapters, state="readonly" if competition else "disabled")
+        subject = self.subject_var.get()
+        competition = subject == SUBJECTS[0]
+        count = len(batch_chapters(subject, self.mode_var.get()))
+        self.chapters = [f"全部模块（一键生成 {count} 份）", *SUBJECT_MODULES[subject]]
+        self.chapter_menu.config(values=self.chapters, state="disabled" if self.busy else "readonly")
         if self.chapter_var.get().startswith("全部模块"):
             self.chapter_var.set(self.chapters[0])
         elif self.chapter_var.get() not in self.chapters:
-            self.chapter_var.set(self.chapters[1] if competition else self.chapters[0])
+            self.chapter_var.set(self.chapters[1])
         for button, value in zip(self.mode_buttons, ("总结知识点", "练习")):
             button.config(fg="#00ffcc" if self.mode_var.get() == value else "#8494aa")
         self.task_badge.config(text="PRACTICE" if practice else "SUMMARY")
         self.set_busy(self.busy)
-        if not competition:
-            self.source_frame.pack_forget()
-            self.task_badge.config(text="COMING SOON")
-            message = "复变函数：目前仅提供科目选择，知识点总结和题目练习功能待接入。"
-            self.resource_tip.config(text=message)
-            self.log(message, "[TIP]")
-            return
-        if practice:
+        if practice and competition:
             self.source_frame.pack(fill="x", pady=(8, 0), before=self.resource_tip)
-            self.resource_tip.config(text="教材用于补充参考；练习另读取真题与开放题库，按非数 A 范围出题。")
-            message = "已切换题目练习：两套各 5 道填空、5 道解答；此模式才读取真题与题库参考。"
         else:
             self.source_frame.pack_forget()
-            self.resource_tip.config(text="教材可选：放入 local_textbook 优先参考；没有教材时，AI 直接总结知识点。")
-            message = "已切换知识点总结：全面梳理、精炼表达并突出重点；批量生成前六模块，综合总结可单独选取。不读取真题或题库。"
+        if practice:
+            count_hint = "5 填空、5 解答" if competition else "5 填空、5 选择、4 解答"
+            fallback = "竞赛真题与开放参考" if competition else "MIT OCW"
+            message = f"两套各 {count_hint}；先题后答。优先改编 Assistant_course 习题，缺少资料再参考 {fallback}。"
+        else:
+            message = f"总结优先用户 PDF，再读 Assistant_course 课程库，最后用 AI 知识补齐；去重并突出重点，末尾 7–10 条易错。批量生成 {count} 份，综合模块可单选。"
+        self.resource_tip.config(text=message)
         self.log(message, "[TIP]")
 
     def toggle_output_format(self, event=None):
@@ -490,12 +487,9 @@ class CourseApp:
         self.busy = busy
         self.subject_menu.config(state="disabled" if busy else "readonly")
         self.fix_env_btn.config(state="disabled" if busy else "normal")
-        self.run_btn.config(state="disabled" if busy or self.subject_var.get() != SUBJECTS[0] else "normal")
+        self.run_btn.config(state="disabled" if busy else "normal")
 
     def start_task(self):
-        if self.subject_var.get() != SUBJECTS[0]:
-            self.log("复变函数生成尚未接入，请切换数学竞赛使用现有功能。", "[TIP]")
-            return
         mode = self.mode_var.get()
         chapter = self.chapter_var.get() 
         ai = self.ai_var.get()
@@ -533,7 +527,7 @@ class CourseApp:
         
         target_chapters = []
         if chapter.startswith("全部模块"):
-            target_chapters = list(MODULE_RULES)[:6 if mode == "总结知识点" else 7]
+            target_chapters = batch_chapters(self.subject_var.get(), mode)
         else:
             target_chapters = [chapter]
 

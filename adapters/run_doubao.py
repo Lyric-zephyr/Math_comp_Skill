@@ -10,11 +10,11 @@ import sys
 if __package__:
     from .document_export import add_output_arguments, check_output_environment, save_document
     from .ai_runtime import add_runtime_arguments, generate_content, save_generated_document
-    from .skill_rules import order_problem_set, validate_problem_set
+    from .skill_rules import chapter_from_prompt, order_problem_set, validate_problem_set
 else:
     from document_export import add_output_arguments, check_output_environment, save_document
     from ai_runtime import add_runtime_arguments, generate_content, save_generated_document
-    from skill_rules import order_problem_set, validate_problem_set
+    from skill_rules import chapter_from_prompt, order_problem_set, validate_problem_set
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -50,7 +50,7 @@ def main(argv=None):
             raise ValueError("AI 返回了空内容，未生成文档。")
         if args.task_mode == "practice" or "任务：【练习】" in args.prompt:
             try:
-                validate_problem_set(content)
+                validate_problem_set(content, args.chapter or chapter_from_prompt(args.prompt))
             except ValueError:
                 recovery = save_document(content, args.filename_prefix, "md")
                 print("[ARTIFACT] " + json.dumps({"path": str(recovery), "kind": "recovery"}, ensure_ascii=False), flush=True)

@@ -341,7 +341,7 @@ def excerpts(chapter_keywords, cache_dir=CACHE, log=print):
                             for number in wanted:
                                 document[number].get_pixmap(dpi=180).save(Path(work) / f"{number + 1:03d}.png")
                             ocr_result = subprocess.run(["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File",
-                                                     str(Path(__file__).with_name("ocr_windows.ps1")), "-ImageDirectory", work],
+                                                     str(ROOT / "skills" / "Common" / "scripts" / "ocr_windows.ps1"), "-ImageDirectory", work],
                                                     capture_output=True, encoding="utf-8", errors="replace", timeout=90,
                                                     creationflags=subprocess.CREATE_NO_WINDOW, check=True)
                             data = json.loads(ocr_result.stdout)

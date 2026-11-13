@@ -8,8 +8,8 @@ listed below.
 
 | Component | License | Included notice |
 | --- | --- | --- |
-| [KaTeX](https://katex.org/), including bundled math fonts | MIT | [LICENSE-KaTeX.txt](skills/math-comp-prep/assets/web/LICENSE-KaTeX.txt) |
-| [Marked](https://marked.js.org/) | MIT | [LICENSE-Marked.txt](skills/math-comp-prep/assets/web/LICENSE-Marked.txt) |
+| [KaTeX](https://katex.org/), including bundled math fonts | MIT | [LICENSE-KaTeX.txt](skills/Common/assets/web/LICENSE-KaTeX.txt) |
+| [Marked](https://marked.js.org/) | MIT | [LICENSE-Marked.txt](skills/Common/assets/web/LICENSE-Marked.txt) |
 
 Keep these notices when redistributing the corresponding JavaScript, CSS,
 fonts, or exported standalone HTML containing those assets.
@@ -25,14 +25,15 @@ file when redistributing frontend builds. Build/test tools retain their own
 package license terms. FastAPI, Uvicorn and psutil are separately installed
 Python dependencies under their respective MIT/BSD licenses.
 
-## Bundled reference selections
+## Externally hosted reference selections
 
-| Collection | Included material | Applicable license |
+| Collection | Material in Assistant_course | Applicable license |
 | --- | --- | --- |
 | [MathNet](https://mathnet.mit.edu/) | Three selected calculus problems | CC BY 4.0, subject to the source record's rights information |
 | [MIT OpenCourseWare](https://ocw.mit.edu/) | Six translated/adapted calculus problems | CC BY-NC-SA 4.0 |
 
-See the [reference-material notice](skills/math-comp-prep/assets/open_problems/NOTICE.md)
+These records are hosted in the separate Assistant_course repository.
+See the [reference-material notice](https://github.com/Lyric-zephyr/Assistant_course/blob/main/Practice/Mathematics_Competition/Open_Problems/NOTICE.md)
 and the individual JSON records for authors, original sources, license links,
 and changes. MIT OCW material requires attribution, noncommercial use, and
 share-alike licensing for adaptations.
@@ -55,5 +56,5 @@ repository:
 `local_textbook/`, `local_problems/`, and `output/` are local runtime data and
 are excluded from version control. Publicly accessible competition PDFs are
 not bundled or assigned an open license by this project. See the
-[source-access notes](skills/math-comp-prep/references/source_access.md) for
+[source-access notes](skills/Mathematics_Competition/references/source_access.md) for
 runtime access behavior and restrictions.

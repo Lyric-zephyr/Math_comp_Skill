@@ -41,21 +41,17 @@ jobs:
         run: python -m pip install -r requirements-dev.txt
       - name: Test local task service and API
         run: python -m pytest -q
-      - name: Check Python syntax and bundled JSON
+      - name: Check Python syntax
         shell: python
         run: |
-          import json
           from pathlib import Path
 
           sources = [Path("main.py")]
-          for directory in ("adapters", "launcher", "skills/math-comp-prep/scripts"):
+          for directory in ("adapters", "launcher", "skills/Common/scripts", "skills/Mathematics_Competition/scripts"):
               sources.extend(sorted(Path(directory).rglob("*.py")))
           for path in sources:
               compile(path.read_text(encoding="utf-8-sig"), str(path), "exec")
-          records = sorted(Path("skills/math-comp-prep/assets/open_problems").glob("*.json"))
-          for path in records:
-              json.loads(path.read_text(encoding="utf-8-sig"))
-          print(f"Checked {len(sources)} Python files and {len(records)} JSON files.")
+          print(f"Checked {len(sources)} Python files.")
       - name: Check command-line entry points without AI calls
         shell: python
         run: |
@@ -67,10 +63,10 @@ jobs:
               "adapters/run_dsh.py",
               "adapters/run_doubao.py",
               "adapters/pdf_export.py",
-              "skills/math-comp-prep/scripts/extract_pdf.py",
-              "skills/math-comp-prep/scripts/compile_latex.py",
-              "skills/math-comp-prep/scripts/check_practice.py",
-              "skills/math-comp-prep/scripts/scrape_cmathc.py",
+              "skills/Common/scripts/extract_pdf.py",
+              "skills/Common/scripts/compile_latex.py",
+              "skills/Common/scripts/check_practice.py",
+              "skills/Mathematics_Competition/scripts/scrape_cmathc.py",
           )
           for script in scripts:
               result = subprocess.run(

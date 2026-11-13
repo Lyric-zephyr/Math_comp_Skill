@@ -17,7 +17,7 @@ else:
     from tool_paths import find_tool, tool_environment
 
 
-ASSETS = Path(__file__).resolve().parent.parent / "skills" / "math-comp-prep" / "assets"
+ASSETS = Path(__file__).resolve().parent.parent / "skills" / "Common" / "assets"
 WEB_ASSETS = ASSETS / "web"
 
 

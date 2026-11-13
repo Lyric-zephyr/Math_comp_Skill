@@ -72,29 +72,31 @@ def test_origin_host_token_and_validation(client):
     assert invalid.status_code == 422 and "SECRET" not in invalid.text
 
 
-def test_subject_options_preserve_local_course_selector(client):
+def test_subject_options_and_complex_generation(client):
     client, manager = client
     options = client.get("/api/options").json()
     assert options["subjects"] == ["数学竞赛", "复变函数"]
-    assert options["defaults"]["subject"] == "数学竞赛"
-    raw = {**DEFAULTS, "subject": "复变函数"}
+    assert len(options["subject_modules"]["复变函数"]) == 8
+    assert options["batch_counts"]["复变函数"] == {"总结知识点": 7, "练习": 7}
+    raw = {**DEFAULTS, "subject": "复变函数", "chapter": "模块一：复数与复变函数"}
     assert client.put("/api/session/settings", json=raw).status_code == 200
-    for kind in ("generate", "sources"):
-        result = client.post("/api/jobs", json={"kind": kind, "settings": raw})
-        assert result.status_code == 422 and "尚未接入" in result.json()["detail"]
-    assert client.get("/api/jobs/current").json() is None
+    assert client.put("/api/session/settings", json={**raw, "chapter": DEFAULTS["chapter"]}).status_code == 422
     assert client.put("/api/session/settings", json={**raw, "subject": "unknown"}).status_code == 422
+    assert client.post("/api/jobs", json={"kind": "sources", "settings": {**raw, "mode": "练习"}}).status_code == 422
     ControlledService.release.set()
-    result = client.post("/api/jobs", json={"kind": "setup", "settings": raw})
+    result = client.post("/api/jobs", json={"settings": {**raw, "chapter": "all"}})
     assert result.status_code == 202
-    assert wait_done(manager, result.json()["id"])["status"] == "succeeded"
+    job = wait_done(manager, result.json()["id"])
+    assert len(job["modules"]) == 7
+    assert all(chapter in options["subject_modules"]["复变函数"] for chapter in job["modules"])
 
 
-@pytest.mark.parametrize("kind", ["generate", "sources"])
-def test_unimplemented_subject_never_runs_competition_backend(kind):
+def test_subject_mismatch_never_runs_competition_backend():
     service = tasks.TaskService(lambda *args: None)
-    with pytest.raises(ValueError, match="尚未接入"):
-        service.execute({**DEFAULTS, "subject": "复变函数"}, kind)
+    with pytest.raises(ValueError, match="不匹配"):
+        service.execute({**DEFAULTS, "subject": "复变函数"})
+    with pytest.raises(ValueError, match="仅用于数学竞赛"):
+        service.execute({**DEFAULTS, "subject": "复变函数"}, "sources")
 
 
 def test_launcher_cli_entry_point():
@@ -211,7 +213,8 @@ if '模块二' in prefix and os.environ.get('MATH_COMP_API_KEY') == 'fail-second
     print('[-] simulated failure', flush=True)
     sys.exit(1)
 path = pathlib.Path(prefix + ('.docx' if fmt == 'word' else '.' + fmt))
-path.write_text(sys.argv[1], encoding='utf-8')
+prompt = pathlib.Path(sys.argv[sys.argv.index('--prompt-file') + 1]).read_text(encoding='utf-8')
+path.write_text(prompt, encoding='utf-8')
 print('[ARTIFACT] ' + json.dumps({'path': str(path), 'kind': 'document'}), flush=True)
 ''', encoding="utf-8")
     monkeypatch.setattr(tasks, "BASE_DIR", str(tmp_path))
@@ -223,10 +226,11 @@ print('[ARTIFACT] ' + json.dumps({'path': str(path), 'kind': 'document'}), flush
 
 @pytest.mark.parametrize("ai,run_mode", [(ai, mode) for ai, provider in tasks.AI_PROVIDERS.items() for mode in web.RUN_MODES[provider]])
 @pytest.mark.parametrize("output_format", ["pdf", "word", "md", "html"])
-def test_real_subprocess_orchestration(simulated, ai, run_mode, output_format):
+@pytest.mark.parametrize("subject,chapter", [("数学竞赛", "模块一：极限与连续"), ("复变函数", "模块一：复数与复变函数")])
+def test_real_subprocess_orchestration(simulated, ai, run_mode, output_format, subject, chapter):
     events = []
     service = tasks.TaskService(lambda kind, data: events.append((kind, data)))
-    settings = {**DEFAULTS, "ai": ai, "run_mode": run_mode, "model": "test", "output_format": output_format}
+    settings = {**DEFAULTS, "subject": subject, "chapter": chapter, "ai": ai, "run_mode": run_mode, "model": "test", "output_format": output_format}
     assert service.execute(settings) == (1, 1)
     assert any(kind == "artifact" for kind, _ in events)
     progress = [data["percent"] for kind, data in events if kind == "progress"]
@@ -244,7 +248,7 @@ def test_batch_partial_failure(simulated, mode, total):
 
 
 def test_textbook_subprocess_and_reference_reuse(simulated):
-    script = simulated / "skills/math-comp-prep/scripts/extract_pdf.py"
+    script = simulated / "skills/Common/scripts/extract_pdf.py"
     script.parent.mkdir(parents=True)
     script.write_text("import pathlib,sys\npathlib.Path(sys.argv[sys.argv.index('--output')+1]).write_text('极限 连续 导数',encoding='utf-8')\nprint('[PROGRESS] 100 OCR完成')", encoding="utf-8")
     (simulated / "local_textbook/book.pdf").write_bytes(b"mock")
@@ -333,7 +337,7 @@ def test_credentials_reset_and_model_error_redaction(client, monkeypatch):
 def test_existing_textbook_cache_still_reused(tmp_path):
     import importlib.util
     fitz = pytest.importorskip("pymupdf")
-    script = Path(__file__).resolve().parents[1] / "skills/math-comp-prep/scripts/extract_pdf.py"
+    script = Path(__file__).resolve().parents[1] / "skills/Common/scripts/extract_pdf.py"
     spec = importlib.util.spec_from_file_location("textbook_cache_check", script)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -362,3 +366,11 @@ def test_practice_structure_failure_emits_recovery(module, tmp_path, monkeypatch
     line = next(line for line in capsys.readouterr().out.splitlines() if line.startswith("[ARTIFACT] "))
     data = json.loads(line.removeprefix("[ARTIFACT] "))
     assert data["kind"] == "recovery" and Path(data["path"]).is_file()
+
+
+def test_long_library_prompt_does_not_use_windows_command_line(simulated, monkeypatch):
+    text = "long reference " * 10000
+    monkeypatch.setattr(tasks, "build_prompt", lambda *a, **k: text)
+    service = tasks.TaskService(lambda *a: None)
+    assert service.execute({**DEFAULTS, "output_format": "md"}) == (1, 1)
+    assert next((simulated / "output").glob("*.md")).read_text(encoding="utf-8") == text
