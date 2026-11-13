@@ -9,17 +9,17 @@
 @page { size: A4; margin: 22mm 20mm; @bottom-right { content: counter(page); font-size: 10pt; } }
 * { box-sizing: border-box; }
 body { max-width: calc(170mm + 40px); margin: 24px auto; padding: 0 20px; background: white; color: black;
-  font: 14pt/1.7 "SimSun", "Songti SC", "Noto Serif CJK SC", serif; overflow-wrap: anywhere; }
+  font: 14pt/2.0 "SimSun", "Songti SC", "Noto Serif CJK SC", serif; overflow-wrap: anywhere; }
 h1 { text-align: center; font-size: 18pt; }
 h2 { font-size: 16pt; }
 h3, h4, h5 { font-size: 14pt; font-weight: 700; margin: 1em 0 0.35em; }
 /* 使用字体加粗，避免描边让 PDF 复制或提取文字时出现重字。 */
-strong { font-family: "SimHei", "Heiti SC", "Noto Sans CJK SC", sans-serif; font-weight: 700; }
+strong { font-family: "SimHei", "Heiti SC", "Noto Sans CJK SC", sans-serif; font-weight: 500; }
 h1, h2, h3, h4, h5, h6 {
   font-family: "SimHei", "Heiti SC", "Noto Sans CJK SC", sans-serif;
   font-weight: 700; break-after: avoid; text-indent: 0;
 }
-#content p { text-indent: 2em; }
+#content p { text-indent: 2em; margin: 0; }
 #content.practice-paper h2 { text-align: center; }
 #content p.difficulty-label { text-indent: 0; }
 #content p.choice-option { text-indent: 2em; margin: 0; }
@@ -31,6 +31,10 @@ thead { display: table-header-group; } tr, .katex-display { break-inside: avoid;
 pre { white-space: pre-wrap; font-size: 10pt; } img { max-width: 100%; }
 .katex { font-size: 1.05em; } .katex .fbox { border-color: #c62828 !important; }
 .katex-display { margin: 1em 0; max-width: 100%; text-align: center; text-indent: 0; }
+.katex-display > .katex { display: inline-block; }
+.formula-row { display: flex; justify-content: center; align-items: center; gap: 0.25em; margin: 1em 0; text-indent: 0; break-inside: avoid; }
+.formula-row > .katex-display { margin: 0; }
+.formula-separator { font: 1.05em/1 KaTeX_Main, serif; }
 nav { margin-bottom: 2em; } nav li { margin: 3px 0; }
 .math-error { color: #b71c1c; border: 1px solid; padding: 4px; }
 @media print { body { width: 170mm; max-width: 100%; margin: 0; padding: 0; } nav { break-after: page; } }
@@ -55,7 +59,11 @@ function math(text, displayMode) {
   const location = offset < 0 ? "公式" : "Markdown 第 " + (source.slice(0, offset).split("\n").length) + " 行";
   // Accept documents produced with the previous LaTeX red-box convention.
   text = text.replace(/\\fcolorbox\s*\{red\}\s*\{white\}\s*\{\\\(([\s\S]*?)\\\)\}/g, (_, formula) => "\\boxed{" + formula + "}");
-  try { return katex.renderToString(text.trim(), {displayMode, throwOnError: true, strict: "ignore", trust: false}); }
+  try {
+    if (/\\(?:small|tiny|scriptsize|footnotesize|scriptstyle|scriptscriptstyle)\b/.test(text))
+      throw new Error("公式须保持统一字号，请移除缩小字号命令并改为换行。");
+    return katex.renderToString(text.trim(), {displayMode, throwOnError: true, strict: "ignore", trust: false})
+    .replace("<span ", '<span data-formula="' + escapeHtml(original) + '" '); }
   catch (error) {
     invalidFormulas.push(original);
     errors.push(location + "：" + text.trim() + "\n" + error.message);
@@ -122,13 +130,39 @@ async function render() {
       });
       document.getElementById("toc").append(label, list);
     } else document.getElementById("toc").remove();
+    const content = document.getElementById("content");
+    content.getBoundingClientRect(); // 先完成布局并触发所需字体加载，再测量公式。
     await document.fonts.ready;
-    // 只缩放超宽公式，避免 Chromium 为容纳公式而缩小整页正文。
+    // 相邻公式最多两个一行；放不下就单独居中，保持原字号。
+    document.querySelectorAll("#content .katex-display").forEach(display => {
+      if (display.parentElement.classList.contains("formula-row")) return;
+      const next = display.nextElementSibling;
+      if (!next || !next.classList.contains("katex-display")) return;
+      const width = element => Math.max(element.scrollWidth, element.getBoundingClientRect().width);
+      const first = display.querySelector(".katex"), second = next.querySelector(".katex");
+      const available = Math.min(display.parentElement.clientWidth, content.clientWidth, 170 * 96 / 25.4) - 8;
+      const gap = parseFloat(getComputedStyle(content).fontSize);
+      if (!first || !second || Math.max(width(first), width(second)) > available * 0.55
+          || width(first) + width(second) + gap > available) return;
+      const row = document.createElement("div"); row.className = "formula-row";
+      const comma = document.createElement("span"); comma.className = "formula-separator";
+      comma.textContent = /(?:^|[^\\])[,，]\s*$/.test(display.dataset.formula || "") ? "" : ",";
+      display.before(row); row.append(display, comma, next);
+    });
+    // 禁止靠缩小字号适配；仍然超宽时交给现有公式修复流程断行。
     document.querySelectorAll("#content .katex").forEach(formula => {
       const display = formula.parentElement.classList.contains("katex-display");
-      const available = Math.min(document.getElementById("content").clientWidth, 170 * 96 / 25.4) - (display ? 4 : 56);
+      const container = formula.closest("p, td, th, li") || content;
+      const style = getComputedStyle(container);
+      const padding = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+      const indent = display ? 4 : Math.max(0, parseFloat(style.textIndent) || 0);
+      const available = Math.max(1, Math.min(container.clientWidth - padding, content.clientWidth, 170 * 96 / 25.4) - indent - 4);
       const width = Math.max(formula.scrollWidth, formula.getBoundingClientRect().width);
-      if (width > available) formula.style.fontSize = (parseFloat(getComputedStyle(formula).fontSize) * available / width * 0.98) + "px";
+      if (width > available) {
+        const original = (display ? formula.parentElement : formula).dataset.formula;
+        if (original) invalidFormulas.push(original);
+        errors.push("公式过宽，请用 aligned 换行，禁止缩小字号：" + (original || formula.textContent));
+      }
     });
   } catch (error) { errors.push(error.message); }
   document.getElementById("render-errors").textContent = errors.join("\n");

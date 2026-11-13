@@ -4,9 +4,9 @@ from pathlib import Path
 import re
 
 if __package__:
-    from .pdf_export import normalize_document
+    from .pdf_export import DOCUMENT_PARTS, normalize_document
 else:
-    from pdf_export import normalize_document
+    from pdf_export import DOCUMENT_PARTS, normalize_document
 
 SKILL_ROOT = Path(__file__).resolve().parent.parent / "skills"
 COMMON_DIR = SKILL_ROOT / "Common"
@@ -124,15 +124,22 @@ def build_prompt(mode, chapter, context, log=print):
 def order_problem_set(content):
     """Keep both papers first and restart numbering in each paper and solution."""
     content = normalize_document(content)
-    sections = list(re.finditer(r"^##[ \t]+第[ \t]*([12一二])[ \t]*[组套][ \t]*(题目|详细解析|答案与解析)[^\n]*$", content, re.M))
-    keys = [("详细解析" if match[2] != "题目" else "题目", "1" if match[1] in ("1", "一") else "2") for match in sections]
+    sections = list(re.finditer(
+        r"^##[ \t]+(?:第[ \t]*([12一二])[ \t]*[组套][ \t]*(题目|详细解析|答案与解析)|答案与解析)[^\n]*$",
+        content, re.M,
+    ))
+    keys = [("详细解析" if match[2] != "题目" else "题目", "1" if match[1] in ("1", "一") else "2") for match in sections if match[1]]
     expected = [("题目", "1"), ("题目", "2"), ("详细解析", "1"), ("详细解析", "2")]
     if len(keys) != 4 or set(keys) != set(expected):
         return content
-    blocks = {}
+    blocks, answers = {}, []
     for index, match in enumerate(sections):
         body = content[match.end():sections[index + 1].start() if index + 1 < len(sections) else len(content)]
-        body = re.sub(r"(?m)^##[ \t]+答案与解析[^\n]*\n?", "", body)
+        # 答案总节也是分界，其下的汇总不能并入上一套的最后一道题。
+        if not match[1]:
+            if body.strip():
+                answers.append(body.strip())
+            continue
         number = 0
 
         def renumber(question):
@@ -141,15 +148,30 @@ def order_problem_set(content):
             return f"{question[1]} 第 {number} 题"
 
         body = re.sub(r"(?m)^(#{3,4})[ \t]+第[ \t]*\d+[ \t]*题", renumber, body)
-        kind, paper = keys[index]
-        blocks[keys[index]] = f"## 第{'一' if paper == '1' else '二'}套 {kind}\n\n{body.strip()}"
+        kind = "题目" if match[2] == "题目" else "详细解析"
+        paper = "1" if match[1] in ("1", "一") else "2"
+        blocks[(kind, paper)] = f"## 第{'一' if paper == '1' else '二'}套 {kind}\n\n{body.strip()}"
     prefix = content[:sections[0].start()].rstrip()
-    ordered = [blocks[key] for key in expected[:2]] + ["## 答案与解析"] + [blocks[key] for key in expected[2:]]
+    answer_section = "\n\n".join(["## 答案与解析"] + answers)
+    ordered = [blocks[key] for key in expected[:2]] + [answer_section] + [blocks[key] for key in expected[2:]]
     return "\n\n".join(([prefix] if prefix else []) + ordered) + "\n"
 
 
 def validate_problem_set(content, chapter=None):
     """Validate both papers against the selected subject's question counts."""
+    headings = list(re.finditer(r"(?m)^##[ \t]+(.+?)[ \t]*$", content))
+    expected = ["第一套 题目", "第二套 题目", "答案与解析", "第一套 详细解析", "第二套 详细解析"]
+    if [heading[1] for heading in headings] != expected:
+        raise ValueError("练习顺序应为两套题目、答案与解析、两套详细解析，答案总标题只能出现一次。")
+    question_area = DOCUMENT_PARTS.sub("", content[:headings[2].start()])
+    if re.search(
+        r"(?m)^[ \t]*(?:#{1,6}[ \t]+)?(?:\d+[.．、][ \t]*)?(?:\*\*|__)?"
+        r"(?:第[ \t]*[12一二][ \t]*[套组][ \t]*)?"
+        r"(?:参考答案|标准答案|答案(?:汇总|速查|与解析)?|详细解析|解析|解答|解|答|提示|思路)"
+        r"[ \t]*(?:\*\*|__)?(?:[：:]|[ \t]*$)",
+        question_area,
+    ):
+        raise ValueError("题目区出现答案、解析或提示；全部答案须放在“答案与解析”之后，不得插入题干或提前汇总。")
     if chapter:
         subject = subject_for_chapter(chapter)
     else:

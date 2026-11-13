@@ -86,8 +86,12 @@ def _format_word(path, practice):
                 element(properties, "b").set(tag("val"), "1")
             paragraph = element(style, "pPr")
             element(paragraph, "ind").set(tag("firstLine"), "0" if heading or name == "Compact" else "560")
-            element(paragraph, "spacing").set(tag("line"), "408")
-            element(paragraph, "spacing").set(tag("lineRule"), "auto")
+            spacing = element(paragraph, "spacing")
+            spacing.set(tag("line"), "480")
+            spacing.set(tag("lineRule"), "auto")
+            if not heading:
+                spacing.set(tag("before"), "0")
+                spacing.set(tag("after"), "0")
             if heading:
                 alignment = "center" if name in ("Title", "Heading1") or name == "Heading2" and practice else "left"
                 element(paragraph, "jc").set(tag("val"), alignment)
@@ -95,6 +99,22 @@ def _format_word(path, practice):
             style.remove(paragraph)
             style.insert(list(style).index(properties), paragraph)
         for paragraph in document.iter(tag("p")):
+            style = paragraph.find(tag("pPr") + "/" + tag("pStyle"))
+            heading = style is not None and style.get(tag("val"), "").startswith(("Heading", "Title"))
+            if not heading:
+                for run in paragraph.findall(tag("r")):
+                    bold = run.find(tag("rPr") + "/" + tag("b"))
+                    if bold is not None and bold.get(tag("val"), "1") not in ("0", "false", "off"):
+                        properties = element(run, "rPr")
+                        fonts = element(properties, "rFonts")
+                        for attribute in ("ascii", "hAnsi", "eastAsia", "cs"):
+                            fonts.set(tag(attribute), "SimHei")
+                        for attribute in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
+                            fonts.attrib.pop(tag(attribute), None)
+                        properties.remove(fonts)
+                        properties.insert(0, fonts)
+                        bold.set(tag("val"), "0")
+                        element(properties, "bCs").set(tag("val"), "0")
             text = "".join(item.text or "" for item in paragraph.iter(tag("t"))).strip()
             display_math = not text and paragraph.find("{http://schemas.openxmlformats.org/officeDocument/2006/math}oMathPara") is not None
             if display_math or re.fullmatch(r"【难度[：:].+】", text):
@@ -103,18 +123,6 @@ def _format_word(path, practice):
                 element(properties, "jc").set(tag("val"), "center" if display_math else "left")
                 paragraph.remove(properties)
                 paragraph.insert(0, properties)
-        for run in document.iter(tag("r")):
-            properties = run.find(tag("rPr"))
-            bold = None if properties is None else properties.find(tag("b"))
-            if bold is not None and bold.get(tag("val"), "1") not in ("0", "false", "off"):
-                fonts = element(properties, "rFonts")
-                for attribute in ("ascii", "hAnsi", "eastAsia", "cs"):
-                    fonts.set(tag(attribute), "SimHei")
-                for attribute in ("asciiTheme", "hAnsiTheme", "eastAsiaTheme", "cstheme"):
-                    fonts.attrib.pop(tag(attribute), None)
-                properties.remove(fonts)
-                properties.insert(1 if properties.find(tag("rStyle")) is not None else 0, fonts)
-                element(properties, "bCs").set(tag("val"), "1")
         replacements = {"word/styles.xml": ET.tostring(styles, encoding="utf-8", xml_declaration=True),
                         "word/document.xml": ET.tostring(document, encoding="utf-8", xml_declaration=True)}
         formatted = path.with_name("formatted.docx")

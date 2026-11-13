@@ -43,52 +43,79 @@ def normalize_math_blanks(content):
     return transform_math(content, lambda text: re.sub(r"(?<!\\)_{2,}", lambda _: r"\underline{\qquad\qquad}", text))
 
 
-def _emphasize_summary(text, protected):
-    """补齐总结正文遗漏的重点标记，只添加 **，不改文字或公式。"""
-    if not re.search(r"(?m)^#{2,3}[ \t]+[一二]、(?:知识梳理|易错总结)", text):
-        return text
-    target = 2
+FORMULA = re.compile(r"=|\\(?:lim|int|sum|prod|[dt]?frac|to|sim|equiv|approx)\b")
 
-    def section(match):
-        nonlocal target
-        heading, body = match[1], match[2]
-        if "知识梳理" in heading:
-            target = 2
-        elif "易错总结" in heading:
-            target = 1
-        existing = list(re.finditer(r"\*\*([^*\n]+)\*\*", body))
-        highlighted = sum(max(1, len(re.findall(r"[。；！？]", mark[1])) + (mark[1][-1] not in "。；！？")) for mark in existing)
-        needed = max(0, target - highlighted)
-        candidates = []
-        for clause in re.finditer(r"(?m)(?:^|(?<=[。；！？]))([^\n。；！？]+[。；！？]?)", body):
-            start = clause.start(1) + len(clause[1]) - len(clause[1].lstrip())
-            for mark in existing:
-                if mark.start() <= start < mark.end():
-                    start = mark.end()
-            value = body[start:clause.end(1)].strip()
-            if (not 6 <= len(re.findall(r"[\u4e00-\u9fff]", value)) <= 100
-                    or "*" in value or value.startswith(("|", ">", "- ", "+ "))):
-                continue
-            tokens = re.findall(r"\x00(\d+)\x00", value)
-            if any(protected[int(index)].startswith(("`", "~~~", "$$", r"\[")) for index in tokens):
-                continue
-            score = 3 * sum(word in value for word in ("必须", "不能", "当且仅当", "充要", "未必", "不一定", "只有"))
-            score += sum(word in value for word in ("前提", "定义", "条件", "应先", "优先", "注意"))
-            start += len(body[start:clause.end(1)]) - len(body[start:clause.end(1)].lstrip())
-            candidates.append((score, start, start + len(value.rstrip("。；！？"))))
-        chosen = sorted(candidates, key=lambda item: (-item[0], item[1]))[:needed]
-        for _, start, end in sorted(chosen, key=lambda item: item[1], reverse=True):
-            body = body[:start] + "**" + body[start:end] + "**" + body[end:]
-        if chosen:
-            # 相邻重点合并，避免 **** 被 Markdown 解析成错误的强调边界。
-            while True:
-                merged = re.sub(r"\*\*([^*\n]+)\*\*\*\*([^*\n]+)\*\*", r"**\1\2**", body)
-                if merged == body:
-                    break
-                body = merged
-        return heading + body
 
-    return re.sub(r"(?m)(^#{1,6}[ \t]+[^\n]*(?:\n|$))([\s\S]*?)(?=^#{1,6}[ \t]|\Z)", section, text)
+def _split_formula_group(formula):
+    """只拆顶层并列公式，保留括号、分式、条件及已有多行环境。"""
+    if re.search(r"\\(?:begin|end)\s*\{", formula):
+        return [formula]
+    stack, boundaries = [], []
+    for token in re.finditer(r"\\[A-Za-z]+|\\.|[{}()\[\],，;；]", formula):
+        value = token[0]
+        if value in ("{", "(", "[", r"\{", r"\["):
+            stack.append(value.lstrip("\\"))
+        elif value in ("}", ")", "]", r"\}", r"\]"):
+            if stack:
+                stack.pop()
+        elif not stack and value in (",", "，", ";", "；", r"\quad", r"\qquad"):
+            boundaries.append((token.start(), token.end()))
+    pieces, start, separator = [], 0, ""
+    for left, right in boundaries + [(len(formula), len(formula))]:
+        part = formula[start:left].strip()
+        if not part:
+            separator += formula[left:right]
+            start = right
+            continue
+        if FORMULA.search(part) and not part.startswith(("(", "[", "+", "-", "=", r"\pm")):
+            pieces.append(part)
+        elif pieces:
+            pieces[-1] += separator + part
+        else:
+            return [formula]
+        separator, start = formula[left:right], right
+    return pieces if len(pieces) > 1 else [formula]
+
+
+def _format_summary(text):
+    """正文保留稀疏强调；易错条目转为不加粗的普通编号段落。"""
+    sections = list(re.finditer(r"(?m)^(#{2,3})[ \t]+[一二]、(知识梳理|易错总结)[^\n]*(?:\n|$)", text))
+    for section in reversed(sections):
+        start = section.end()
+        boundary = re.search(r"(?m)^#{1," + str(len(section[1])) + r"}[ \t]+", text[start:])
+        end = start + boundary.start() if boundary else len(text)
+        body = text[start:end]
+        if section[2] == "易错总结":
+            body = re.sub(r"(\*\*|__)(.+?)\1", r"\2", body, flags=re.S)
+            number = 0
+
+            def plain_item(match):
+                nonlocal number
+                number += 1
+                title = re.sub(r"^\d+[.．、][ \t]*", "", match[1].strip())
+                return f"{number}.{title}" + ("" if re.search(r"[：:]", title) else "：")
+
+            body = re.sub(r"(?m)^#{3,6}[ \t]+([^\n]+)", plain_item, body)
+            body = re.sub(r"(?m)^[ \t]*(\d+)[.．、][ \t]*", r"\n\n\1.", body)
+            body = re.sub(r"(?m)^(\d+\.[^\n：:]+[：:])[ \t]*\n+[ \t]*", r"\1", body)
+            body = "\n" + re.sub(r"\n{3,}", "\n\n", body).strip() + "\n\n"
+        else:
+            def emphasize(topic):
+                prose = re.sub(r"(?m)^#{1,6}[ \t]+[^\n]*", "", topic)
+                if re.search(r"\*\*[^*\n]+\*\*|__[^_\n]+__", prose):
+                    return topic
+                keywords = r"充要条件|必要条件|充分条件|当且仅当|适用条件|收敛条件|定义域|存在条件|一致连续|绝对收敛|一致收敛|解析函数|单调有界|左右极限|收敛半径|唯一性|留数|极限|收敛|连续|导数|积分|变换|级数"
+                for match in re.finditer(keywords, topic):
+                    line = topic[topic.rfind("\n", 0, match.start()) + 1:match.start()]
+                    if not line.lstrip().startswith(("#", ">", "|", "- ", "+ ")):
+                        return topic[:match.start()] + "**" + match[0] + "**" + topic[match.end():]
+                return topic
+
+            body = "".join(emphasize(topic) for topic in re.split(
+                r"(?m)(?=^#{" + str(len(section[1]) + 1) + r"}[ \t]+)", body,
+            ))
+        text = text[:start] + body + text[end:]
+    return text
 
 
 def normalize_document(content):
@@ -100,6 +127,42 @@ def normalize_document(content):
         return f"\x00{len(protected) - 1}\x00"
 
     text = DOCUMENT_PARTS.sub(protect, normalize_math_blanks(content))
+    # 并列公式先独立成段；只有变量或代码的枚举仍保留行内排版。
+    atom = r"\x00\d+\x00"
+    separator = r"[ \t]*(?:[,，、;；][ \t]*(?:(?:以及|及|和)[ \t]*)?|(?:以及|及|和)[ \t]*)"
+
+    def split_group(match):
+        value = protected[int(match[1])]
+        part = DOCUMENT_PARTS.fullmatch(value)
+        line = text[text.rfind("\n", 0, match.start()) + 1:match.start()]
+        if not part or not part["math"] or line.lstrip().startswith(("#", "|", ">")):
+            return match[0]
+        width = 2 if value.startswith(("$$", r"\(", r"\[")) else 1
+        pieces = _split_formula_group(value[width:-width])
+        if len(pieces) < 2:
+            return match[0]
+        tokens = []
+        for piece in pieces:
+            tokens.append(f"\x00{len(protected)}\x00")
+            protected.append("$$\n" + piece + "\n$$")
+        return "\n\n" + "\n\n".join(tokens) + "\n\n"
+
+    text = re.sub(r"\x00(\d+)\x00[ \t]*[，,。；;]?", split_group, text)
+
+    def display_group(match):
+        indexes = [int(number) for number in re.findall(r"\x00(\d+)\x00", match[0])]
+        parts = [DOCUMENT_PARTS.fullmatch(protected[index]) for index in indexes]
+        line = text[text.rfind("\n", 0, match.start()) + 1:match.start()]
+        if line.lstrip().startswith(("#", "|", ">")) or not all(part and part["math"] for part in parts):
+            return match[0]
+        formulas = [part[0][2:-2] if part[0].startswith(("$$", r"\(", r"\[")) else part[0][1:-1] for part in parts]
+        if sum(bool(FORMULA.search(formula)) for formula in formulas) < 2:
+            return match[0]
+        for index, formula in zip(indexes, formulas):
+            protected[index] = "$$\n" + formula.strip() + "\n$$"
+        return "\n\n" + "\n\n".join(f"\x00{index}\x00" for index in indexes) + "\n\n"
+
+    text = re.sub(atom + "(?:" + separator + atom + ")+[ \t]*[，,。；;]?", display_group, text)
     # 居中交给模板处理，不把模型偶尔输出的 HTML 布局标签印进正文。
     text = re.sub(r"(?im)^[ \t]*<(?:div|center)\b[^>\n]*>[ \t]*", "\n", text)
     text = re.sub(r"(?im)</(?:div|center)>[ \t]*(?=\n|$)", "\n", text)
@@ -112,7 +175,7 @@ def normalize_document(content):
     text = re.sub(r"\n{3,}", "\n\n", text)
     # 中文句末标点留在粗体外，避免 **重点。**下一句 被 Markdown 当成普通文字。
     text = re.sub(r"\*\*([^*\n]*[^\s*，。；：！？、,.!?;:])([，。；：！？、,.!?;:]+)\*\*", r"**\1**\2", text)
-    text = _emphasize_summary(text, protected)
+    text = _format_summary(text)
     return re.sub(r"\x00(\d+)\x00", lambda match: protected[int(match[1])], text)
 
 

@@ -243,18 +243,25 @@ def _generate_summary(chapter, prompt, generate, progress=None):
 
     body = re.sub(r"(?m)^###[ \t]+(?:\d+[.、．][ \t]*)?(.+)$", renumber, "\n\n".join(parts))
     errors = _generate_summary_part(prompt, "二、易错总结", generate,
-                "仅输出本模块 7–10 条易错提醒；每条用 ### 编号短小标题和一句凝练说明。"
+                "仅输出本模块 7–10 条易错提醒；每条为独立普通段落，格式为 1.标题：正文，编号从1开始。"
+                "条目不用小标题，标题与正文均不加粗。"
                 "不重新展开定义或整套公式。已覆盖主题：\n" + "\n".join(covered))
     progress("易错总结")
     return f"## 一、知识梳理\n\n{body}\n\n{errors}\n"
 
 
 def _generate_summary_part(prompt, heading, generate, scope=""):
+    emphasis_rule = ("易错条目使用普通编号段落，标题和正文均不加粗，不使用小标题。"
+                     if heading == "二、易错总结" else
+                     "每个主要知识小节通常用 **...** 标出1处关键术语或适用条件，极短或纯公式小节可不标；重点须清晰可辨，不连续加粗多个句子或整段。")
     instruction = (f"\n\n【分段执行】本轮仅输出 `## {heading}` 及其内容，不输出总标题、目录或其他大节。"
-                   "第一原则全面，第二原则简洁突出重点。保留定义、条件和重要结论，按共用精炼规则压缩冗余叙述，"
-                   "合并同义公式与非必要中间式，不用文字重述公式。重点公式就地用\\boxed，"
-                   "正文关键结论、适用条件和方法判断句充分用**加粗**，不只加粗标题或术语，不整段加粗。"
-                   "独立公式用$$并空行分隔，正文首行缩进由模板处理。\n" + scope)
+                   "第一原则全面，第二原则简洁突出重点。保留定义、条件和重要结论，删去铺垫、过渡、泛泛评价与显然步骤。"
+                   "每个知识点、公式和方法只完整表述一次，跨小节仅简短指代；输出前合并同义内容，易错只写误用与纠正。"
+                   "合并等价公式与非必要中间式，不用文字复述公式。重点公式就地用\\boxed，"
+                   f"{emphasis_rule}"
+                   "优先正面写出条件与结论，减少反复使用不等于、不能判定、不意味着等表述，保留必要的数学不等式和反例。"
+                   "并列出现多个公式时，先单独写文字标签，再另起独立公式行，每行1–2个，同行两式之间由模板加逗号，长式单独一行；"
+                   "公式用$$居中并空行分隔，超宽用aligned断行，禁止缩小字号或把多条公式塞进行内正文。正文首行缩进由模板处理。\n" + scope)
     for attempt in range(2):
         try:
             body = generate(prompt + instruction).strip()
@@ -266,8 +273,15 @@ def _generate_summary_part(prompt, heading, generate, scope=""):
                 raise RuntimeError(f"知识点分段结构不正确，应只包含：{heading}。")
             if not headings:
                 body = f"## {heading}\n\n{body}"
-            if heading == "二、易错总结" and not 7 <= len(re.findall(r"(?m)^###[ \t]+", body)) <= 10:
-                raise RuntimeError("易错总结应包含 7–10 条编号小标题及简短提醒。")
+            if __package__:
+                from .pdf_export import normalize_document
+            else:
+                from pdf_export import normalize_document
+            body = normalize_document(body)
+            if heading == "二、易错总结":
+                numbers = re.findall(r"(?m)^(\d+)\.[^\n：:]+[：:]", body)
+                if not 7 <= len(numbers) <= 10 or numbers != [str(number) for number in range(1, len(numbers) + 1)]:
+                    raise RuntimeError("易错总结应包含 7–10 条连续编号的普通段落，格式为 1.标题：正文。")
             return body
         except (RuntimeError, subprocess.TimeoutExpired):
             if attempt:
@@ -288,9 +302,9 @@ def save_generated_document(provider, args, base_dir, content):
         report_progress(92, "修复公式并重新导出")
         formulas = list(dict.fromkeys(error.formulas))
         prompt = (
-            "修复下列公式的 KaTeX/LaTeX 语法。只返回 JSON 数组，每项包含 old 和 new 两个字符串；"
+            "修复下列公式的 KaTeX/LaTeX 语法或超宽排版；过宽用 aligned 在等号、加减号或逻辑分隔处合理断行，禁止缩小字号。只返回 JSON 数组，每项包含 old 和 new 两个字符串；"
             "old 必须逐字等于输入公式，new 为修复后的公式，不带 $ 或其他数学定界符。"
-            "保留数学含义、符号、条件和数值，只修复语法，不重新解题或修改正文。"
+            "保留数学含义、符号、条件和数值，只修复语法与换行，不重新解题或修改正文。"
             "反斜杠按 JSON 规范转义；每个输入公式必须对应一项。\n"
             + json.dumps({"formulas": formulas, "error": str(error)}, ensure_ascii=False)
         )
