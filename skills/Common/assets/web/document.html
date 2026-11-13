@@ -30,10 +30,10 @@ th, td { border: 1px solid #888; padding: 5px 8px; text-align: left; }
 thead { display: table-header-group; } tr, .katex-display { break-inside: avoid; }
 pre { white-space: pre-wrap; font-size: 10pt; } img { max-width: 100%; }
 .katex { font-size: 1.05em; } .katex .fbox { border-color: #c62828 !important; }
-.katex-display { margin: 1em 0; max-width: 100%; text-align: center; text-indent: 0; }
+.katex-display { display: block; width: 100%; margin: 1em 0; max-width: 100%; text-align: center; text-indent: 0; }
 .katex-display > .katex { display: inline-block; }
-.formula-row { display: flex; justify-content: center; align-items: center; gap: 0.25em; margin: 1em 0; text-indent: 0; break-inside: avoid; }
-.formula-row > .katex-display { margin: 0; }
+.formula-row { display: flex; width: 100%; justify-content: center; align-items: center; gap: 0.25em; margin: 1em 0; text-indent: 0; break-inside: avoid; }
+.formula-row > .katex-display { width: auto; flex: 0 0 auto; margin: 0; }
 .formula-separator { font: 1.05em/1 KaTeX_Main, serif; }
 nav { margin-bottom: 2em; } nav li { margin: 3px 0; }
 .math-error { color: #b71c1c; border: 1px solid; padding: 4px; }

@@ -46,20 +46,61 @@ def normalize_math_blanks(content):
 FORMULA = re.compile(r"=|\\(?:lim|int|sum|prod|[dt]?frac|to|sim|equiv|approx)\b")
 
 
-def _split_formula_group(formula):
-    """只拆顶层并列公式，保留括号、分式、条件及已有多行环境。"""
-    if re.search(r"\\(?:begin|end)\s*\{", formula):
-        return [formula]
+def _formula_boundaries(formula, separators):
+    """查找括号与花括号之外的分隔符。"""
     stack, boundaries = [], []
-    for token in re.finditer(r"\\[A-Za-z]+|\\.|[{}()\[\],，;；]", formula):
+    for token in re.finditer(r"\\[A-Za-z]+|\\.|[{}()\[\],，;；&]", formula):
         value = token[0]
         if value in ("{", "(", "[", r"\{", r"\["):
             stack.append(value.lstrip("\\"))
         elif value in ("}", ")", "]", r"\}", r"\]"):
             if stack:
                 stack.pop()
-        elif not stack and value in (",", "，", ";", "；", r"\quad", r"\qquad"):
+        elif not stack and value in separators:
             boundaries.append((token.start(), token.end()))
+    return boundaries
+
+
+def _split_formula_group(formula):
+    """拆开独立公式清单，保留真正的多行推导、方程组及矩阵。"""
+    environment = re.fullmatch(
+        r"\s*\\begin\{(aligned|array)\}([\s\S]*?)\\end\{\1\}\s*[,，.。]?\s*",
+        formula,
+    )
+    if environment:
+        body = environment[2]
+        if environment[1] == "array":
+            columns = re.match(r"\s*\{[lcr ]+\}", body)
+            if not columns:
+                return [formula]
+            body = body[columns.end():]
+        if re.search(r"\\(?:begin|end)\s*\{", body):
+            return [formula]
+        rows, start = [], 0
+        for left, right in _formula_boundaries(body, {r"\\"}) + [(len(body), len(body))]:
+            row = body[start:left].strip()
+            start = right
+            if not row:
+                continue
+            cells, offset = [], 0
+            for begin, end in _formula_boundaries(row, {"&"}) + [(len(row), len(row))]:
+                if row[offset:begin].strip():
+                    cells.append(row[offset:begin].strip())
+                offset = end
+            row = ("," if len(cells) > 1 and all(FORMULA.search(cell) for cell in cells) else " ").join(cells)
+            pieces = _split_formula_group(row)
+            if not pieces or len(pieces) > 2 or any(
+                not FORMULA.search(piece) or re.match(r"[=+\-<>]|\\(?:sim|equiv|approx|to|leq?|geq?|neq?)\b", piece)
+                for piece in pieces
+            ):
+                return [formula]
+            rows.append(pieces)
+        if rows and any(len(row) == 2 for row in rows):
+            return [piece for row in rows for piece in row]
+        return [formula]
+    if re.search(r"\\(?:begin|end)\s*\{", formula):
+        return [formula]
+    boundaries = _formula_boundaries(formula, {",", "，", ";", "；", r"\quad", r"\qquad"})
     pieces, start, separator = [], 0, ""
     for left, right in boundaries + [(len(formula), len(formula))]:
         part = formula[start:left].strip()
@@ -67,7 +108,16 @@ def _split_formula_group(formula):
             separator += formula[left:right]
             start = right
             continue
-        if FORMULA.search(part) and not part.startswith(("(", "[", "+", "-", "=", r"\pm")):
+        wrapped = False
+        if part.startswith(("(", "[")):
+            opening, closing = ("(", ")") if part[0] == "(" else ("[", "]")
+            depth = 0
+            for index, character in enumerate(part):
+                depth += (character == opening) - (character == closing)
+                if depth == 0:
+                    wrapped = index == len(part) - 1
+                    break
+        if FORMULA.search(part) and not wrapped and not part.startswith(("+", "-", "=", r"\pm")):
             pieces.append(part)
         elif pieces:
             pieces[-1] += separator + part
