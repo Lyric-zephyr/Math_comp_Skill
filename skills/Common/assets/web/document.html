@@ -138,6 +138,8 @@ async function render() {
       if (display.parentElement.classList.contains("formula-row")) return;
       const next = display.nextElementSibling;
       if (!next || !next.classList.contains("katex-display")) return;
+      // 多行公式、矩阵和分段函数各自占行，避免并排后内部行偏离正文中心。
+      if (display.querySelector(".mtable") || next.querySelector(".mtable")) return;
       // 以句号结尾的公式已是完整句子，不再接逗号和下一式。
       if (/[.。]\s*$/.test(display.dataset.formula || "")) return;
       // 测公式内容本身的宽度：.katex 在独立公式里是整行宽的块，不能直接拿来量。
@@ -164,7 +166,7 @@ async function render() {
       if (width > available) {
         const original = (display ? formula.parentElement : formula).dataset.formula;
         if (original) invalidFormulas.push(original);
-        errors.push("公式过宽，请用 aligned 换行，禁止缩小字号：" + (original || formula.textContent));
+        errors.push("公式过宽，请用 gathered 换行并逐行居中，禁止缩小字号：" + (original || formula.textContent));
       }
     });
   } catch (error) { errors.push(error.message); }

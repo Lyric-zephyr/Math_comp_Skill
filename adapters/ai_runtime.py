@@ -304,7 +304,7 @@ def save_generated_document(provider, args, base_dir, content):
         report_progress(92, "修复公式并重新导出")
         formulas = list(dict.fromkeys(error.formulas))
         prompt = (
-            "修复下列公式的 KaTeX/LaTeX 语法或超宽排版；过宽用 aligned 在等号、加减号或逻辑分隔处合理断行，禁止缩小字号。只返回 JSON 数组，每项包含 old 和 new 两个字符串；"
+            "修复下列公式的 KaTeX/LaTeX 语法或超宽排版；过宽用 gathered 在等号、加减号或逻辑分隔处合理断行，每行各自居中，不用 & 对齐，禁止缩小字号；分隔逗号放在红框外且不重复。只返回 JSON 数组，每项包含 old 和 new 两个字符串；"
             "old 必须逐字等于输入公式，new 为修复后的公式，不带 $ 或其他数学定界符。"
             "保留数学含义、符号、条件和数值，只修复语法与换行，不重新解题或修改正文。"
             "反斜杠按 JSON 规范转义；每个输入公式必须对应一项。\n"

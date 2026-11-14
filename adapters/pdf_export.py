@@ -43,7 +43,10 @@ def normalize_math_blanks(content):
     def tidy(text):
         text = re.sub(r"(?<!\\)_{2,}", lambda _: r"\underline{\qquad\qquad}", text)
         # 逗号后紧跟下一式，只留一个普通空格，不留 \quad、\qquad 大块空白。
-        return re.sub(r"([,，])\s*(?:\\q?quad\b|\\[ ;:>]|~)+\s*", lambda m: m[1] + r"\ ", text)
+        text = re.sub(r"([,，])\s*(?:\\q?quad\b|\\[ ;:>]|~)+\s*", lambda m: m[1] + r"\ ", text)
+        if text.startswith(("$$", r"\[")):
+            text = text[:2] + _normalize_formula_layout(text[2:-2]) + text[-2:]
+        return text
     return transform_math(content, tidy)
 
 
@@ -53,9 +56,14 @@ FORMULA = re.compile(r"=|\\(?:lim|int|sum|prod|[dt]?frac|to|sim|equiv|approx)\b"
 def _formula_boundaries(formula, separators):
     """查找括号与花括号之外的分隔符。"""
     stack, boundaries = [], []
-    for token in re.finditer(r"\\[A-Za-z]+|\\.|[{}()\[\],，;；&]", formula):
+    for token in re.finditer(r"\\(?:begin|end)\{[^{}]+\}|\\[A-Za-z]+|\\.|[{}()\[\],，;；&]", formula):
         value = token[0]
-        if value in ("{", "(", "[", r"\{", r"\["):
+        if value.startswith(r"\begin{"):
+            stack.append(value)
+        elif value.startswith(r"\end{"):
+            if stack and stack[-1] == value.replace(r"\end", r"\begin", 1):
+                stack.pop()
+        elif value in ("{", "(", "[", r"\{", r"\["):
             stack.append(value.lstrip("\\"))
         elif value in ("}", ")", "]", r"\}", r"\]"):
             if stack:
@@ -65,10 +73,67 @@ def _formula_boundaries(formula, separators):
     return boundaries
 
 
+def _normalize_formula_layout(formula):
+    """红框外保留分隔逗号；多行公式逐行居中，不改变矩阵及分段函数内部。"""
+    start, pieces = 0, []
+    for box in re.finditer(r"\\boxed\s*\{", formula):
+        if box.start() < start:
+            continue
+        depth = 1
+        for token in re.finditer(r"\\.|[{}]", formula[box.end():]):
+            depth += (token[0] == "{") - (token[0] == "}")
+            if depth == 0:
+                end = box.end() + token.start()
+                inner = _normalize_formula_layout(formula[box.end():end])
+                comma = re.search(r"(?<!\\)[,，](?:\s*[,，])*\s*$", inner)
+                suffix = ""
+                if comma:
+                    inner = inner[:comma.start()].rstrip()
+                    if not re.match(r"\s*[,，]", formula[end + 1:]):
+                        suffix = ","
+                pieces.append(formula[start:box.end()] + inner + "}" + suffix)
+                start = end + 1
+                break
+    formula = "".join(pieces) + formula[start:]
+    formula = re.sub(r"(?<!\\)[,，](?:\s*[,，])+\s*$", ",", formula)
+    environment = re.fullmatch(
+        r"\s*\\begin\{(aligned|split|array|gathered)\}([\s\S]*?)\\end\{\1\}\s*([,，.。]?)\s*", formula,
+    )
+    if not environment:
+        return formula
+    body = environment[2]
+    if environment[1] == "array":
+        columns = re.match(r"\s*\{[lcr ]+\}", body)
+        if not columns:
+            return formula
+        body = body[columns.end():]
+    boundaries = _formula_boundaries(body, {r"\\"})
+    if not boundaries:
+        return formula
+    rows, start = [], 0
+    for left, right in boundaries + [(len(body), len(body))]:
+        row = body[start:left].strip()
+        start = right
+        spacing = re.match(r"\[[^\]\n]*\]", row) if rows else None
+        if spacing:
+            row = row[spacing.end():].strip()
+        cells, offset = [], 0
+        for begin, end in _formula_boundaries(row, {"&"}) + [(len(row), len(row))]:
+            if row[offset:begin].strip():
+                cells.append(row[offset:begin].strip())
+            offset = end
+        independent = len(cells) > 1 and all(
+            FORMULA.search(cell) and not re.match(r"[=+\-<>]|\\(?:sim|equiv|approx|to|leq?|geq?|neq?)\b", cell)
+            for cell in cells
+        )
+        rows.append((spacing[0] if spacing else "") + "\n" + ("," if independent else " ").join(cells))
+    return r"\begin{gathered}" + r" \\".join(rows) + "\n" + r"\end{gathered}" + environment[3]
+
+
 def _split_formula_group(formula):
     """拆开独立公式清单，保留真正的多行推导、方程组及矩阵。"""
     environment = re.fullmatch(
-        r"\s*\\begin\{(aligned|array)\}([\s\S]*?)\\end\{\1\}\s*[,，.。]?\s*",
+        r"\s*\\begin\{(aligned|array|gathered)\}([\s\S]*?)\\end\{\1\}\s*[,，.。]?\s*",
         formula,
     )
     if environment:
@@ -201,7 +266,7 @@ def normalize_document(content):
         tokens = []
         for piece in pieces:
             tokens.append(f"\x00{len(protected)}\x00")
-            protected.append("$$\n" + piece + "\n$$")
+            protected.append("$$\n" + _normalize_formula_layout(piece) + "\n$$")
         return "\n\n" + "\n\n".join(tokens) + "\n\n"
 
     text = re.sub(r"\x00(\d+)\x00[ \t]*[，,。；;]?", split_group, text)
@@ -216,7 +281,7 @@ def normalize_document(content):
         if sum(bool(FORMULA.search(formula)) for formula in formulas) < 2:
             return match[0]
         for index, formula in zip(indexes, formulas):
-            protected[index] = "$$\n" + formula.strip() + "\n$$"
+            protected[index] = "$$\n" + _normalize_formula_layout(formula.strip()) + "\n$$"
         return "\n\n" + "\n\n".join(f"\x00{index}\x00" for index in indexes) + "\n\n"
 
     text = re.sub(atom + "(?:" + separator + atom + ")+[ \t]*[，,。；;]?", display_group, text)
