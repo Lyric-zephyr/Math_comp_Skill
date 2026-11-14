@@ -57,9 +57,7 @@ jobs:
           import sys
 
           scripts = (
-              "adapters/run_codex.py",
-              "adapters/run_dsh.py",
-              "adapters/run_doubao.py",
+              "adapters/run.py",
               "adapters/pdf_export.py",
               "skills/Common/scripts/extract_pdf.py",
               "skills/Common/scripts/compile_latex.py",

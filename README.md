@@ -1,548 +1,326 @@
 # Course_Skill
 
-A desktop study workspace with a subject selector for **数学竞赛 (Mathematics
-Competition)** and **复变函数 (Complex Analysis)**. Both subjects support
-knowledge summaries and practice papers, using shared formatting and separate
-subject rules and reference materials.
-Generate study notes or practice papers with your chosen AI, then save the
-result as **Word, PDF, Markdown, or HTML**.
+Course_Skill is a desktop study helper. Pick a subject and a topic, and it
+asks an AI to write either **study notes** or **practice papers with full
+solutions**. You get the result as a Word, PDF, Markdown, or HTML file.
 
-Built primarily for Windows. The interface and generated study materials are
-mainly in Chinese; this README explains the Chinese button labels as you go.
+It currently covers two subjects:
 
-## Quick start
+- **数学竞赛**: Chinese college math competition, non-math-major track (非数学 A 类)
+- **复变函数**: complex analysis, plus Fourier and Laplace transforms
 
-You need **Python 3.10+**, a modern browser, and access to one supported AI service.
-The default interface is a light Chinese web workspace served only on this computer.
-Tkinter is needed only for the legacy interface.
-No API key, textbook, or browser session is included in the repository.
+It's built for Windows and the interface is in Chinese. This README gives the
+Chinese button names along with what they mean.
 
-1. Download the complete repository and extract it, or clone it with Git.
-2. Open a terminal in the folder containing `main.py`. For a source checkout,
-   install **Node.js 22+**, then install dependencies, build the frontend, and start:
+## Getting started
 
-   ```sh
-   python -m pip install -r requirements.txt
-   npm --prefix frontend ci
-   npm --prefix frontend run build
-   python main.py
-   ```
+You'll need:
 
-   The launcher opens your browser after the server is ready. Release packages include
-   the built frontend, so they do not need Node.js or the two `npm` commands.
+- **Python 3.10 or newer**
+- **Edge or Chrome**
+- **One AI service**: ChatGPT (website login, Codex CLI, or API key), DeepSeek
+  (API key), or Doubao 豆包 (API key)
 
-3. Under **科目 (Subject)**, choose **数学竞赛 (Mathematics Competition)** or
-   **复变函数 (Complex Analysis)**. Choose **知识点总结** for study notes or
-   **题目练习** for questions and solutions, then choose a module.
-4. Open **设置** to choose an AI service and running method from the table below. For **API**,
-   enter your key and model ID. Select **Word**, **PDF**, **MD**, or **HTML** under
-   **输出格式**.
-5. **Click 一键配置环境 (One-click setup) first.** The app installs missing
-   tools where supported, checks the selected setup, and exports a sample.
-   Follow any login instructions in the **详细日志** panel.
-6. Click **开始生成** to generate your document.
+The repository doesn't include any API keys or textbooks. You bring your own.
 
-Files are saved in `output/` and open automatically when generation succeeds.
-Repeated generations keep earlier files and use numbered names such as
-`practice.pdf`, `practice_2.pdf`, and `practice_3.pdf`. The same protection
-applies to all output formats and Markdown recovery files.
-Use **输出文件夹 (Open output folder)** to find them later.
+**1. Install and launch.** Open a terminal in the project folder (the one with
+`main.py`) and run:
 
-**No textbook is required.** If you provide one, relevant excerpts take
-priority, followed by the matching `Assistant_course/Course/` library. The AI
-fills remaining gaps from its own mathematics knowledge.
+```sh
+python -m pip install -r requirements.txt
+python main.py
+```
 
-## Web workspace and development
-
-The React/TypeScript frontend and FastAPI backend are separate. Production assets
-are served by the same local server; no cloud deployment or Node.js runtime is
-needed for everyday use. Source checkouts require Node.js 22+ to build once:
+If you cloned the source code instead of downloading a release, build the
+interface once first. This needs **Node.js 22+**:
 
 ```sh
 npm --prefix frontend ci
 npm --prefix frontend run build
-python main.py
 ```
 
-After frontend changes, rebuild and refresh the page. For frontend-only work,
-`npm --prefix frontend run dev` serves Vite; it intentionally has no production
-API credentials or cross-origin API proxy. Use the built interface for integrated
-work. Missing assets produce explicit build instructions instead of installing
-Node.js automatically. Backend dependencies are in `requirements.txt`.
-When a `.venv` exists in the project folder, `main.py` automatically uses its
-Python interpreter, including when launched from VS Code or a system Python.
+Your browser opens automatically. Keep the terminal open while you work, and
+press **Ctrl+C** in it to quit.
 
-The server chooses an available port on `127.0.0.1` and opens an authenticated
-startup URL. The token is exchanged for an HttpOnly, SameSite cookie; the UI removes
-the startup query from its displayed address. Do not share the startup URL.
-Host, Origin and session authentication are checked on API requests. Files can
-only be opened using server-issued IDs or fixed resource names.
+**2. Choose what to make.**
 
-Refreshing, closing, or reopening the page does not interrupt a task. Keep the
-launcher terminal running; press Ctrl+C there to stop the service and its workers.
-The dedicated ChatGPT login browser remains open. Only one generation, setup, or
-source-index task runs at a time. There is no pause, cancellation, historical task
-browser, or resume after a backend restart. The current task, bounded logs and
-result files remain visible while the backend runs; all task snapshots remain in
-server memory until shutdown. Ordinary preferences are saved in browser local
-storage. API keys stay in backend memory, are never returned to the frontend,
-and must be re-entered after a backend restart unless supplied by environment.
+- **科目** (subject): 数学竞赛 or 复变函数
+- **知识点总结** (study notes) or **题目练习** (practice papers)
+- A module (topic), or **全部模块** (all modules)
+- **输出格式** (output format): Word, PDF, MD, or HTML
 
-The task card contains module and format choices. **设置** opens the AI settings
-drawer. The right panel shows actual stage progress, module statuses, results and
-collapsible logs. Partial failures expand the logs. Successful files still open
-automatically; result cards also offer **打开文件** and **所在文件夹**. Missing
-output dependencies should be prepared with **一键配置环境**.
+**3. Set up your AI.** Click **设置** (settings), pick a service, and fill in
+what it asks for. See [Choosing an AI service](#choosing-an-ai-service) below.
 
-The old interface remains available during migration:
+**4. Click 一键配置环境 (one-click setup).** Do this the first time, and again
+whenever you switch AI service or output format. It installs whatever's missing
+and runs a quick test. If it asks you to log in to something, the instructions
+show up in the **详细日志** (detailed log) panel.
 
-```sh
-python main.py --legacy-ui
-```
+**5. Click 开始生成 (start).** The finished file opens on its own when it's ready.
+You can find all your files in the `output/` folder, or click **输出文件夹**.
+When you use an API, the number of tokens used is shown under each finished
+file, so you can estimate the cost. Older files are never overwritten. A second run gets saved as
+`practice_2.pdf`, then `practice_3.pdf`, and so on.
 
-It shares the same generation and environment-setup service. It requires Tkinter.
-`python main.py --no-browser` starts the web server without opening a browser.
+You can close or refresh the browser tab and the work keeps going. Only one task
+runs at a time, and you can't pause or cancel one. To stop everything, press **Ctrl+C**
+in the terminal.
 
-To validate without AI calls:
+## Choosing an AI service
 
-```sh
-python main.py --help
-npm --prefix frontend run build
-```
-
-Create a distributable source ZIP including built assets with
-`python scripts/package_release.py`; it packages committed sources and the current
-frontend build, excluding local study data. Commit source changes before packaging.
-
-## Choose an AI service
-
-| Service | Running methods | What you provide |
+| Service | How to connect | What you need |
 | --- | --- | --- |
-| GPT (Codex) | GUI, CLI, API | Website login, Codex CLI login, or an API key and model ID |
-| DeepSeek (DSH) | API | A DeepSeek API key and model ID |
-| Doubao (豆包) | API | A Volcengine Ark API key and model or inference endpoint ID |
+| ChatGPT | GUI, CLI, or API | A ChatGPT login, a Codex CLI login, or an OpenAI API key |
+| DeepSeek | API | A DeepSeek API key |
+| Doubao 豆包 | API | A Volcengine Ark API key |
 
-Only configure the method you intend to use. All supported methods work with
-both tasks and all four output formats.
+You only need to set up one.
 
-### API
+**API.** Paste your key and click **读取模型** (load models) to choose from your
+account's models. If nothing comes back, type the model ID yourself. Doubao
+also accepts endpoint IDs like `ep-...`. Paste just the key, with no quotes and
+no `Bearer` in front. Your key is held in memory while the app is running. It
+isn't saved to disk, so you'll need to enter it again after a restart. You pay
+your provider for usage as usual.
 
-Select **API**, enter your **API-Key**, then click **读取模型 (Read models)**.
-Choose a model from the returned list or type its exact API model ID directly.
-Doubao also accepts an inference endpoint ID such as `ep-...`.
-
-The key authenticates your account; **its format does not identify a model**.
-Reading models sends a request to the selected provider. If that provider does
-not expose a compatible model-list endpoint, enter the ID manually. Availability
-and generation permissions depend on your account.
-
-GPT API starts with an empty model field unless you set `OPENAI_MODEL`.
-API model IDs can differ from Codex CLI names. An API key and a model ID are
-both required; website login does not replace API credentials.
-
-Keys entered in the app stay in memory and are passed to the adapter through
-its environment. They are not saved in project files or command-line arguments.
-API charges depend on the provider and your account.
-Paste only the actual key, without labels, quotes, or a `Bearer` prefix. Local
-checks reject non-ASCII characters and embedded whitespace before textbook
-extraction, preventing request-header encoding errors after a long OCR run.
-
-### GPT CLI
-
-Choose **GPT (Codex) → CLI**, then click **一键配置环境**. On Windows, setup can
-install missing Node.js and Codex CLI. Complete the first login in a terminal:
+**ChatGPT CLI.** Click **一键配置环境**, which can install Node.js and Codex CLI
+for you on Windows. Then log in once from a terminal:
 
 ```sh
 codex login
 ```
 
-Select a CLI model your account supports, then return to the app. For manual
-installation, see the [official Codex documentation](https://developers.openai.com/codex/noninteractive/).
+**ChatGPT GUI.** This option drives the ChatGPT website directly. Click
+**一键配置环境** to get the browser ready. When you start generating, a ChatGPT
+window opens. Log in there and choose your model. The window stays open
+afterwards, so close it when you're finished. Your login is remembered, but if
+ChatGPT changes its website, this mode may stop working until the app is
+updated.
 
-### GPT GUI
+## What you get
 
-Choose **GPT (Codex) → GUI** and click **一键配置环境** to prepare Playwright and
-Edge/Chrome. Generation opens a dedicated ChatGPT browser window. Sign in,
-complete any verification, and choose the model on the website.
+### Study notes (知识点总结)
 
-The app waits for the page to be ready before submitting the prompt. The browser
-stays open after success, failure, or timeout; close it yourself when finished.
-If submission status is uncertain, check that window before retrying.
+Notes for one module cover the definitions, formulas, the conditions they need,
+theorems, methods, and common mistakes. They're kept tight. Each topic gets a
+short heading, the most important 6–8 formulas are boxed, and every module ends
+with a list of 7–10 traps to watch out for. The **comprehensive** module ties
+all the other modules together. It takes more AI calls, so it's slower and
+costs more.
 
-Login sessions are stored outside the repository, under
-`%LOCALAPPDATA%/MathCompSkill/browser/` on Windows. Website layout changes can
-affect automation. DeepSeek and Doubao use API only.
+### Practice papers (题目练习)
 
-## Tasks and modules
+Each run produces **two papers**, then the answers and worked solutions.
 
-| Task | Result | Reference behavior |
-| --- | --- | --- |
-| SUMMARY — 知识点总结 | Formulas, theorems, conditions, common mistakes, and extensions | User PDF → matching Assistant_course Course library → AI knowledge; no past papers or question banks |
-| PRACTICE — 题目练习 | Two practice papers followed by answers and detailed solutions | Matching Assistant_course Practice library first; then subject-specific online references |
+| Subject | Each paper contains |
+| --- | --- |
+| 数学竞赛 | 5 fill-in-the-blank + 5 full-solution questions |
+| 复变函数 | 5 fill-in-the-blank + 5 multiple-choice + 4 full-solution questions |
 
-Mathematics Competition practice targets **non-mathematics A (非数学 A 类)**. Each paper contains
-**five fill-in questions and five full-solution questions**, numbered **1–10
-independently**. Both papers appear before the answer section; solutions are
-grouped under separate first-paper and second-paper headings.
+The app remembers every question it has given you for each module. These are
+stored in `local_practice/`. A new question that's too close to an old one gets
+rejected. Same goes for one that only swaps a few numbers or variable names.
+When that happens, or when a paper comes back in the wrong layout, the app asks
+the AI to try again, up to two more times. Each retry is another AI call. If the third
+attempt still has repeats, a small box appears in the progress panel asking
+whether to keep that paper anyway (保留) or throw it away (放弃).
 
-Complex Analysis generates two papers of **5 fill-in, 5 single-choice, and
-4 full-solution questions**, numbered **1–14** per paper. Adapted questions are
-marked **改编** in their solutions; per-question source links are omitted.
-
-The app checks question counts, numbering, and section structure. This check
-does not verify mathematical correctness or guarantee competition difficulty.
-
-Practice also keeps a per-module question history in `local_practice/`, shared
-across AI providers, running methods, and output formats. New papers are checked
-against all recorded questions and against each other. Exact repeats, changes
-limited to numbers or variable names, and highly similar text trigger up to two
-additional generation requests, which can incur additional API charges. If all
-three attempts fail the check, export stops. Semantic equivalence cannot be
-guaranteed by text checks alone; the Skill also requires different problem designs.
-
-Keep this ignored local history to preserve avoidance across restarts. It stores
-question statements, not textbook OCR results, and records accepted questions
-even if subsequent document conversion fails. Earlier Markdown papers can be
-registered with:
+To add an older paper to this history so future papers avoid its questions:
 
 ```sh
 python skills/Common/scripts/check_practice.py "paper.md" --chapter "模块一：极限与连续" --record
 ```
 
-Overwritten or unrecorded past papers cannot be reconstructed automatically.
+> **Always check the maths yourself.** The app makes sure the papers have the
+> right structure, but it can't tell whether an answer is correct or a question
+> is as hard as it should be.
 
-| Module | Topic |
-| --- | --- |
-| 1 | Limits and continuity |
-| 2 | Single-variable differentiation |
-| 3 | Single-variable integration |
-| 4 | Multivariable differentiation |
-| 5 | Multiple, line, and surface integrals |
-| 6 | Series and ordinary differential equations |
-| 7 | Comprehensive practice and connections across modules |
+### Modules
 
-Choose **全部模块 (All modules)** to generate **six summaries** (modules 1–6)
-or **seven practice documents** (modules 1–7), depending on the task.
-Complex Analysis has eight selectable modules: complex numbers and functions;
-analytic functions and applications; complex integration; series; residues and
-applications; Fourier transforms; Laplace transforms; and comprehensive review.
-Its **All modules** option generates **seven documents** in either mode. The
-comprehensive module is selected individually.
-The current queue processes modules one at a time.
+**数学竞赛** has 7 modules:
 
-The progress bar shows the whole workflow as a percentage: environment checks
-(0–5%), textbook reading (5–25%), and the selected modules (25–100%). Textbook
-progress follows pages inspected/OCR batches; generation advances when summary
-parts finish, practice validation finishes, and files are exported. During a
-single AI request it stays at the current stage: this is workflow progress,
-not a token count or a time estimate. Retries do not move the bar backward.
-At 100%, the queue has been processed; check the success/failure counts in the log.
+1. Limits and continuity
+2. Differentiation (one variable)
+3. Integration (one variable)
+4. Differentiation (several variables)
+5. Multiple, line, and surface integrals
+6. Series and differential equations
+7. Comprehensive: mixing topics from all modules
 
-Summary priorities are **complete coverage first**, then **concise explanations
-with clear emphasis on key points**. Cover definitions, formulas, conditions,
-theorems, methods, extensions, and common mistakes. Present formulas, conditions,
-and key results under natural subheadings, with only brief necessary explanations.
-Use short paragraphs rather than bullet lists or mechanically numbered items.
-Avoid restating formulas in prose or expanding unnecessary derivations; preserve
-essential content and emphasize key points.
-Merge redundant formulas and omit unnecessary intermediate expressions, aiming
-for about 20% fewer formulas without losing essential coverage. Usually highlight
-6–8 important formulas per module with boxes and bold the key statements.
-There is no fixed word-count target or requirement to match a textbook's length.
-Summaries combine definitions, formulas, conditions and theorems by topic;
-they do not repeat a separate “core formulas” section. Important formulas are
-boxed where first introduced. Each ordinary module ends with **7–10 concise
-error reminders**. Disjoint topic groups and the final reminders are generated
-separately; an unfinished part is retried once. Select the comprehensive module
-for all ordinary modules plus new connections between them, without compressing
-them into a short overview. This requires
-more AI requests and may increase generation time and API charges. Coverage and
-mathematical accuracy still depend on the model and should be reviewed.
+**复变函数** has 8 modules: complex numbers and functions, analytic functions,
+complex integration, series, residues, Fourier transforms, Laplace transforms,
+and a comprehensive review.
+
+**全部模块** (all modules) runs the modules one after another. It makes one
+document per module and skips the comprehensive module, which you have to pick
+on its own. The one exception is 数学竞赛 practice papers, where the
+comprehensive module is included.
+
+The progress bar shows which step you're on. It isn't a time estimate. It will
+often sit still while the AI is writing.
 
 ## Output formats
 
-| Format | Saved file | Tools used |
+| Format | Notes | Needs |
 | --- | --- | --- |
-| Word | `.docx`, with editable equations | Pandoc |
-| PDF | `.pdf`; browser export is the default | Edge/Chrome, or optional Pandoc + XeLaTeX |
-| MD | `.md`, ready for editing | No rendering tools |
-| HTML | `.html`, with embedded math styles and fonts | Edge/Chrome during generation |
+| Word | Equations can be edited in Word | Pandoc |
+| PDF | Made through your browser by default | Edge or Chrome |
+| MD | Plain Markdown, easy to edit | Nothing extra |
+| HTML | Opens in any browser, works offline | Edge or Chrome |
 
-Successful generation saves **only the selected format**. Conversion files stay
-in temporary folders. Generating the same task and module again replaces its
-previous file in that format.
+**一键配置环境** installs any of these that are missing. There's also an optional
+**LaTeX（专业排版）** PDF mode for professional typesetting, but you don't need
+LaTeX for normal PDFs.
 
-Formatted documents use **14pt Songti body text**, two-character paragraph
-indents, bold Heiti headings, numbered subheadings, and bold key statements.
-Body paragraphs after headings or equations also use two-character first-line
-indents; standalone equations are centered without paragraph indentation.
-Major headings use 16pt; only major sections enter the table of contents.
-Practice paper and solution headings are centered. Markdown appearance depends
-on the viewer.
-
-Browser PDF export scales overwide formulas individually to keep body text at
-its intended size. KaTeX, Marked, and math fonts are bundled locally; rendering
-does not need a CDN. AI generation still needs a network connection.
-
-Runs of underscores inside math are automatically converted to valid fill-in
-lines. If browser PDF/HTML export still reports invalid formulas, generation
-automatically asks the selected AI to repair only those formulas and retries
-export up to twice, without regenerating the questions or the entire document.
-These repair requests may incur API charges. Browser startup/printing failures
-are also retried once. If recovery fails, Markdown remains available for editing
-and re-export; no unlimited retry loop is used.
-
-## What one-click setup handles
-
-The button configures the **currently selected AI method and output format**:
-
-- Installs missing Python helpers and checks the output with a sample document.
-- For GPT GUI, prepares Playwright and checks the automation browser.
-- For GPT CLI, installs missing CLI tools on Windows and checks login status.
-- For API, checks that credentials, a model, and a supported service URL are
-  configured. Actual authentication and generation permissions are checked by
-  the provider when requests are made.
-- For Word, installs missing Pandoc on Windows.
-- For browser PDF or HTML, detects Edge/Chrome and can install missing Edge on
-  Windows.
-- For **LaTeX（专业排版）**, installs missing Pandoc/MiKTeX on Windows, enables
-  package installation, checks updates, and tests compilation.
-
-**Default PDF export needs no MiKTeX, Perl, Pandoc, or LaTeX.** Choose LaTeX
-only when you want that typesetting workflow.
-
-Automatic Windows system-tool installation uses **WinGet (App Installer)** and
-needs internet access. Login, API credentials, and any operating-system approval
-prompts remain manual. Other operating systems require missing system tools to
-be installed manually. AI and output setup report their results separately.
-
-## Optional textbooks and practice references
-
-The default shared library is the public
-[Assistant_course repository](https://github.com/Lyric-zephyr/Assistant_course).
-**Users do not need to clone or download a separate material pack.** The app
-reads the selected subject's index/manifest, fetches a few relevant Markdown/text
-files from GitHub, and sends excerpts to the chosen AI. Textbook indexes map
-chapters, sections and keywords to study modules, so the reader selects small
-relevant sections instead of fetching whole books. Originals remain in the
-material library for checking. All providers use the
-same reader; this does not depend on the model having browsing access.
-
-Summary reads only `Course/<subject>/`; practice prefers `Practice/<subject>/`,
-with MIT OCW as the Complex Analysis fallback. Requests have timeouts and size
-limits. Small, bounded caches live only in service memory, refreshing roughly
-every five minutes; remote materials are not saved to the project or disk.
-
-Practice catalogs group ordinary exercises by study module without duplicating
-the source questions. Past papers keep their original year, numbering and
-solutions; the AI can adapt relevant questions for chapter practice. Where
-available, source line ranges select matching questions, with paired solution
-files read alongside them. Topic tags are retrieval hints; adapted answers are
-recomputed and checked against the new question.
-
-If GitHub is unreachable or rate-limited, the app reports it and tries a sibling
-`Assistant_course/` folder before continuing with the subject's fallback sources.
-Set `COURSE_SKILL_LIBRARY` to explicitly use a local library instead. Missing
-online/local materials do not prevent generation.
-
-Click **教材文件夹 (Open textbook folder)** and place textbook PDFs in
-`local_textbook/`. The reader works with user-provided PDFs across textbooks
-and editions. Matching excerpts are sent to your chosen AI. On Windows, pages
-without a text layer are automatically processed by the built-in OCR engine,
-with page progress shown in the UI and log.
-
-Successful recognition is saved locally in `local_textbook/.ocr-cache/`, which
-is covered by the existing Git ignore rule. Later runs hash the current PDF
-with SHA-256 and check the cached text's integrity;
-unchanged files reuse their text without repeating extraction or OCR. Renaming
-the same PDF or updating extraction tools does not invalidate its cache. Changed
-PDF content or damaged/incomplete cache data cause recognition to run again. Password
-and copy restrictions are checked before reading a cache. Only successful,
-nonempty results are saved, using an atomic file replacement; failed cache
-writes do not block the current run. Temporary page images are cleaned up.
-
-Delete `local_textbook/.ocr-cache/` to clear all textbook memory, or force a
-single textbook to be recognized again:
-
-```sh
-python skills/Common/scripts/extract_pdf.py "textbook.pdf" --refresh --output textbook.txt
-```
-
-Use `--no-cache` to skip both cache reads and writes for that command.
-Caches stay local. Force recognition again after fixing an OCR language/tool issue.
-A large scanned book can take several minutes on its first run. OCR
-requires an installed Windows recognition language. The AI may correct OCR
-errors using context and mathematical consistency checks; material assumptions
-must be identified, and unrecoverable passages are skipped. Such reconstruction
-does not establish the exact original wording or guarantee mathematical accuracy.
-On other systems, add a text layer with an OCR tool first.
-Missing or irrelevant textbook content does not prevent knowledge summaries
-from being generated.
-
-The optional command-line source-index tool reports discovered past-paper
-sources from editions **1–17**. An indexed edition is not a claim
-that every paper was downloaded or read successfully.
-
-The reader checks robots rules, redirects, login responses, and PDF password
-and copying restrictions. It reads permitted PDFs in memory by default.
-When explicitly using the source-index tool, `local_problems/` holds its report
-and OCR cache; it is runtime data,
-is recreated when needed, and is excluded from version control.
-
-If no usable official text is available, the prompt requires the output to be
-identified as unverified simulated practice. OCR can misread formulas. The separate
-Assistant_course repository also contains attributed selections of **three MathNet
-problems** and **six MIT OCW problems**. Course_Skill reads these online rather
-than bundling question content. Automatic official-source fallback uses a system
-temporary workspace for OCR and removes it afterward.
-
-See the [source-access notes](skills/Mathematics_Competition/references/source_access.md)
-for source availability and retrieval behavior.
-
-## Troubleshooting
-
-| Problem | What to do |
-| --- | --- |
-| A required tool cannot be found | Select your AI method and output format, then click **一键配置环境** |
-| Codex CLI is installed but not signed in | Run `codex login`, then check setup again |
-| The API model field is empty | Enter a key and click **读取模型**, or type the exact API model/endpoint ID |
-| The model list cannot be read | Check the key and selected provider; enter the ID manually if listing is unsupported |
-| An API call is rejected | Check the key, model access, endpoint, and account status with the provider |
-| A `latin-1` or API-Key character error appears | Copy the real key from the provider again; remove labels, quotes, a `Bearer` prefix, or placeholder text. Do not change the encoding of the textbook or strip characters from the secret itself |
-| GPT GUI does not continue | Complete login/verification in the retained window; website changes may require an adapter update |
-| A textbook cannot be read | On Windows, let automatic OCR finish; if its language is unavailable, install Chinese OCR in Windows language settings. Elsewhere, OCR the PDF first. Summaries can also run without textbooks |
-| A formula fails to render | Use the reported Markdown line to fix the saved source, then export it again |
-| The output file is locked | Close the existing document in its viewer and retry export |
-| A practice paper has the wrong structure | Structure errors trigger up to two retries; inspect retained Markdown if all three attempts fail |
-
-Transient browser failures are retried **once**, without another AI call.
-If conversion still fails, Markdown is preserved so you can recover the content.
-Re-export it without regenerating:
+Documents use 14pt Songti for body text, bold Heiti for headings, and indented
+paragraphs. If a formula won't render, the app asks the AI to fix that formula
+only, up to twice. If export still fails, the Markdown file is kept so nothing
+is lost. You can export it again without making another AI request:
 
 ```sh
 python adapters/pdf_export.py "output/notes.md"
 ```
 
-Use complete formula syntax such as `\frac{a}{b}`; see
-[KaTeX-supported syntax](https://katex.org/docs/supported.html). If you already
-have a rendered HTML document, you can also open it in Edge/Chrome and use
-**Ctrl+P → Save as PDF**.
+## Textbooks and reference material (optional)
 
-## Customize the rules
+Course_Skill works fine with no textbook at all. If you give it more to work
+with, here's the order it uses things:
 
-GPT, DeepSeek, and Doubao share the same task and module rules.
+1. **Your own textbook PDFs.** Click **教材文件夹** (textbook folder) and drop
+   PDFs into `local_textbook/`. The app sends the AI the relevant pages, not the
+   whole book. Scanned books get OCR'd on Windows. The first run on a big book
+   can take several minutes, but the result is cached, so you only wait once.
+   If OCR fails, add the Chinese language pack in Windows Settings.
+2. **The shared course library.** The app pulls short, relevant excerpts from the
+   public [Assistant_course](https://github.com/Lyric-zephyr/Assistant_course)
+   repository automatically. You don't need to download it. If GitHub can't be
+   reached, it looks for an `Assistant_course/` folder next to this project.
+   You can also point `COURSE_SKILL_LIBRARY` at a local copy.
+3. **The AI's own knowledge** fills in whatever's left.
 
-| File or directory | Purpose |
+Practice papers draw first on past exam papers and exercises in the course
+library, then on public sources such as past competition papers and MIT
+OpenCourseWare. If the AI couldn't find any real source material, the paper is
+marked as **simulated practice** (模拟练习). See the
+[source-access notes](skills/Mathematics_Competition/references/source_access.md)
+for details.
+
+To clear the textbook cache, delete `local_textbook/.ocr-cache/`. To re-read just
+one book:
+
+```sh
+python skills/Common/scripts/extract_pdf.py "textbook.pdf" --refresh --output textbook.txt
+```
+
+## Troubleshooting
+
+| Problem | Try this |
 | --- | --- |
-| [Common](skills/Common/SKILL.md) | Shared formatting, material priority, summary and practice rules |
-| [Mathematics Competition](skills/Mathematics_Competition/SKILL.md) | Competition scope, question types and difficulty |
-| [Complex Analysis](skills/Complex_Analysis/SKILL.md) | Eight modules, transforms, and 14-question paper structure |
-| [knowledge_summary.md](skills/Common/references/knowledge_summary.md) | Summary structure and formatting |
-| [problem_set.md](skills/Mathematics_Competition/references/problem_set.md) | Practice structure and difficulty requirements |
-| [references/modules/](skills/Mathematics_Competition/references/modules/) | Scope of each module |
-| [document.html](skills/Common/assets/web/document.html) | Browser PDF/HTML typography |
-| [template.tex](skills/Common/assets/template.tex) | XeLaTeX typography |
-| [format_practice.lua](skills/Common/scripts/format_practice.lua) | Practice layout for LaTeX export |
-| [check_practice.py](skills/Common/scripts/check_practice.py) | Check or register papers against per-module question history |
+| Something says a tool is missing | Choose your AI and output format, then click **一键配置环境** |
+| Codex CLI isn't logged in | Run `codex login`, then run setup again |
+| No models show up | Check your key and provider. You can also type the model ID by hand |
+| The API refuses the request | Check your key, your account balance, and that your account can use that model |
+| An error mentions `latin-1` or bad characters in the key | Copy the key again and paste only the key, with no label, quotes, or `Bearer` |
+| ChatGPT GUI gets stuck | Look at the ChatGPT window. You may need to log in or complete a verification |
+| A textbook can't be read | Let OCR finish. If it fails, install Chinese OCR in Windows language settings |
+| A formula won't render | The error tells you the line number. Fix it in the `.md` file and export again |
+| Export fails because the file is in use | Close the file in Word or your PDF viewer and try again |
+| A practice paper keeps failing its checks | Look at the Markdown file that was saved and fix it by hand |
 
-Rule changes affect new generations. Template changes affect newly exported
-documents; existing PDFs keep their layout until exported again.
+## Customizing
+
+Everything the AI is told to do is written in plain Markdown files, and you can
+edit them. Your changes apply the next time you generate something.
+
+| File | Controls |
+| --- | --- |
+| [skills/Common/SKILL.md](skills/Common/SKILL.md) | Rules for both subjects: formatting, source priority, notes and practice |
+| [Mathematics_Competition/SKILL.md](skills/Mathematics_Competition/SKILL.md) | Competition scope, question types, difficulty |
+| [Complex_Analysis/SKILL.md](skills/Complex_Analysis/SKILL.md) | Complex analysis modules and paper layout |
+| [knowledge_summary.md](skills/Common/references/knowledge_summary.md) | How study notes are structured |
+| [problem_set.md](skills/Mathematics_Competition/references/problem_set.md) | How practice papers are structured |
+| [references/modules/](skills/Mathematics_Competition/references/modules/) | What each competition module covers |
+| [document.html](skills/Common/assets/web/document.html) | PDF and HTML styling |
+| [template.tex](skills/Common/assets/template.tex) | LaTeX PDF styling |
 
 <details>
-<summary><strong>Advanced: environment variables and command-line tools</strong></summary>
+<summary><strong>Advanced: command line and environment variables</strong></summary>
 
-Run commands from the project folder. For API calls, you can set credentials
-outside the app using these variables:
+You can set API keys with environment variables instead of typing them into the
+app:
 
-| Service | Key | Model override | Base URL override |
+| Service | Key | Model | Base URL |
 | --- | --- | --- | --- |
-| GPT | `OPENAI_API_KEY` | `OPENAI_MODEL` | `OPENAI_BASE_URL` |
+| ChatGPT | `OPENAI_API_KEY` | `OPENAI_MODEL` | `OPENAI_BASE_URL` |
 | DeepSeek | `DEEPSEEK_API_KEY` | `DEEPSEEK_MODEL` | `DEEPSEEK_BASE_URL` |
 | Doubao | `ARK_API_KEY` | `ARK_MODEL` | `ARK_BASE_URL` |
 
-Base URLs default to official provider endpoints. Example with shared summary
-rules and a selected module:
+Generate a document without the interface:
 
 ```sh
-python adapters/run_dsh.py "Focus on common mistakes" output/notes --run-mode API --api-model YOUR_MODEL --task-mode summary --chapter "模块一：极限与连续" --output-format pdf
+python adapters/run.py "Focus on common mistakes" output/notes --provider dsh --api-model YOUR_MODEL --task-mode summary --chapter "模块一：极限与连续" --output-format pdf
 ```
 
-Use `adapters/run_codex.py` for GPT or `adapters/run_doubao.py` for Doubao.
-All adapters accept `--output-format word|pdf|md|html`, `--timeout SECONDS`
-(default: 1200), and `--task-mode summary|practice` with `--chapter`.
+Set `--provider` to `codex` for ChatGPT, `dsh` for DeepSeek, or `doubao` for
+Doubao. Options include `--output-format word|pdf|md|html`,
+`--task-mode summary|practice`, and `--timeout SECONDS` (default 1200).
 
-To use the optional XeLaTeX exporter:
+Default model IDs, and the list of Codex CLI models in the settings panel, are
+kept in [models.json](models.json). Edit that file when providers release new
+models.
 
-```sh
-python adapters/pdf_export.py "output/notes.md" --engine latex
-```
-
-The app checks registry PATH entries and common tool locations on Windows.
-For custom installations, set the actual paths before launching:
+If the app can't find tools you installed somewhere unusual, tell it where they
+are before launching:
 
 ```powershell
 $env:MATH_COMP_BROWSER = "D:\Tools\Browser\chrome.exe"
-$env:MATH_COMP_PANDOC = "D:\Tools\Pandoc\pandoc.exe"
+$env:MATH_COMP_PANDOC  = "D:\Tools\Pandoc\pandoc.exe"
 $env:MATH_COMP_TEX_BIN = "D:\Tools\MiKTeX\miktex\bin\x64"
 python main.py
 ```
 
-Replace these example paths with real locations. `MATH_COMP_XELATEX` can specify
-an exact `xelatex.exe` path. The LaTeX template requires XeLaTeX; use it through
-the exporter, which fills in the document content.
+Other launch options:
 
-To refresh the past-paper source index:
-
-```sh
-python skills/Mathematics_Competition/scripts/scrape_cmathc.py --refresh
-```
-
-To attempt downloading every discovered, automatically accessible PDF from
-editions 1–17:
-
-```sh
-python skills/Mathematics_Competition/scripts/scrape_cmathc.py --download-all
-```
-
-The report lists restricted, missing, and failed sources.
+- `python main.py --no-browser` starts the server without opening a browser.
+- `python adapters/pdf_export.py "output/notes.md" --engine latex` exports a PDF
+  with LaTeX.
+- `python skills/Mathematics_Competition/scripts/scrape_cmathc.py --refresh`
+  rebuilds the index of past competition papers. Add `--download-all` to try
+  downloading every one of them.
 
 </details>
 
-## Project layout
+## For developers
+
+The interface is built with React and TypeScript in `frontend/`, and the backend
+uses FastAPI. Both run only on your own computer. After changing the frontend,
+run `npm --prefix frontend run build` and refresh the page. If a `.venv` folder
+exists, `main.py` uses it automatically.
+
+The server only listens on `127.0.0.1` and requires a one-time login link, which
+is the link that opens in your browser. Don't share that link.
 
 ```text
 Course_Skill/
-├── main.py                  # Local web launcher; --legacy-ui for Tkinter
-├── frontend/                # React UI; dist/ is generated by the build
-├── launcher/                # Shared task service, FastAPI and legacy interface
-├── adapters/                # AI integrations, environment setup, exporters
-├── skills/
-│   ├── Common/              # Shared rules, extraction scripts and export templates
-│   ├── Mathematics_Competition/ # Competition modules and practice sources
-│   └── Complex_Analysis/    # Complex analysis and transform modules
-├── local_textbook/          # Place textbook PDFs here; contents and OCR cache stay local
-├── local_problems/          # Runtime reference cache; created when needed
-├── local_practice/          # Per-module generated-question history; local only
-└── output/                  # Generated documents
+├── main.py           # Start here
+├── frontend/         # Web interface (React)
+├── launcher/         # Backend server and task runner
+├── adapters/         # AI connections, setup, and file export
+├── skills/           # The rules given to the AI, per subject
+├── local_textbook/   # Your textbook PDFs (not uploaded to Git)
+├── local_practice/   # Question history (not uploaded to Git)
+├── local_problems/   # Cache for the past-paper index (not uploaded to Git)
+└── output/           # Your generated documents
 ```
 
-## Contributing
-
-Bug reports, math-rule improvements, and pull requests are welcome in English
-or Chinese. See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup,
-verification, and contribution guidelines. Optional Python helpers are listed
-in [requirements.txt](requirements.txt); one-click setup remains the recommended
-way to prepare your selected method and output format.
-
-GitHub issue and pull request templates are included. GitHub Actions checks
-Python syntax and CLI entry points on Windows and Linux without
-calling AI services. Live accounts, GUI login, and document rendering require
-separate checks.
-
-Report vulnerabilities using [SECURITY.md](SECURITY.md).
+To build a release ZIP with the interface already built, run
+`python scripts/package_release.py`. See [CONTRIBUTING.md](CONTRIBUTING.md)
+for how to contribute. Issues and pull requests are welcome in English or
+Chinese. To report a security problem, see [SECURITY.md](SECURITY.md).
 
 ## License
 
-Original project code, rules, and templates use the [MIT License](LICENSE).
-Third-party software and reference materials retain their own licenses, listed
-in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+The project's own code, rules, and templates are under the [MIT License](LICENSE).
+Third-party software and materials keep their own licenses. See
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

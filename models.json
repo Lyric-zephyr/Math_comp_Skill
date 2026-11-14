@@ -1,0 +1,8 @@
+{
+  "api": {
+    "codex": "gpt-5.2",
+    "dsh": "deepseek-flash",
+    "doubao": "doubao-seed-2-1-pro-260915"
+  },
+  "cli": ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-5.2"]
+}

@@ -40,7 +40,11 @@ def transform_math(content, transform):
 
 
 def normalize_math_blanks(content):
-    return transform_math(content, lambda text: re.sub(r"(?<!\\)_{2,}", lambda _: r"\underline{\qquad\qquad}", text))
+    def tidy(text):
+        text = re.sub(r"(?<!\\)_{2,}", lambda _: r"\underline{\qquad\qquad}", text)
+        # 逗号后紧跟下一式，只留一个普通空格，不留 \quad、\qquad 大块空白。
+        return re.sub(r"([,，])\s*(?:\\q?quad\b|\\[ ;:>]|~)+\s*", lambda m: m[1] + r"\ ", text)
+    return transform_math(content, tidy)
 
 
 FORMULA = re.compile(r"=|\\(?:lim|int|sum|prod|[dt]?frac|to|sim|equiv|approx)\b")
@@ -103,7 +107,7 @@ def _split_formula_group(formula):
     boundaries = _formula_boundaries(formula, {",", "，", ";", "；", r"\quad", r"\qquad"})
     pieces, start, separator = [], 0, ""
     for left, right in boundaries + [(len(formula), len(formula))]:
-        part = formula[start:left].strip()
+        part = re.sub(r"\A(?:\s|\\[ ,;:!>]|\\q?quad\b|~)+", "", formula[start:left]).strip()
         if not part:
             separator += formula[left:right]
             start = right
@@ -128,7 +132,7 @@ def _split_formula_group(formula):
 
 
 def _format_summary(text):
-    """正文保留稀疏强调；易错条目转为不加粗的普通编号段落。"""
+    """正文保留稀疏强调；易错条目转为普通编号段落，条目内可保留少量加粗词语。"""
     sections = list(re.finditer(r"(?m)^(#{2,3})[ \t]+[一二]、(知识梳理|易错总结)[^\n]*(?:\n|$)", text))
     for section in reversed(sections):
         start = section.end()
@@ -136,7 +140,10 @@ def _format_summary(text):
         end = start + boundary.start() if boundary else len(text)
         body = text[start:end]
         if section[2] == "易错总结":
-            body = re.sub(r"(\*\*|__)(.+?)\1", r"\2", body, flags=re.S)
+            # 只去掉包住整条标题或整段的加粗，保留条目中少量加粗的关键词。
+            body = re.sub(r"(?m)^([ \t]*(?:\d+[.．、][ \t]*)?)(\*\*|__)([^\n]+?)\2(?=[ \t]*(?:[：:]|$))",
+                          r"\1\3", body)
+            body = re.sub(r"(?m)^([ \t]*\d+[.．、][ \t]*)(\*\*|__)([^\n*_]+?[：:])\2", r"\1\3", body)
             number = 0
 
             def plain_item(match):

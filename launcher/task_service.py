@@ -13,11 +13,12 @@ from adapters.ai_runtime import API_SETTINGS
 from adapters.skill_rules import ALL_MODULE_RULES, SUBJECT_MODULES, batch_chapters, build_prompt
 from adapters.task_progress import parse_progress
 from adapters.problem_sources import open_source_index
+from adapters.course_sources import _excerpts as textbook_excerpts
 
 BASE_DIR = str(Path(__file__).resolve().parent.parent)
 SUBJECTS = ("数学竞赛", "复变函数")
 AI_PROVIDERS = {"GPT (Codex)": "codex", "DeepSeek (DSH)": "dsh", "豆包": "doubao"}
-AI_ADAPTERS = {name: str(Path(BASE_DIR) / "adapters" / filename) for name, filename in zip(AI_PROVIDERS, ("run_codex.py", "run_dsh.py", "run_doubao.py"))}
+ADAPTER = str(Path(BASE_DIR) / "adapters" / "run.py")
 
 class TaskService:
     def __init__(self, emit):
@@ -27,6 +28,8 @@ class TaskService:
         self.lock = threading.Lock()
         self.stopping = False
         self.secret = ""
+        self.adapter = None
+        self.usage = None
 
     def log(self, text, prefix="[SYS]"):
         message = f"{prefix} {text}"
@@ -82,13 +85,40 @@ class TaskService:
                 pass
 
     def artifact_line(self, line, chapter):
+        if line.startswith("[USAGE] "):
+            try:
+                self.usage = json.loads(line[len("[USAGE] "):])
+            except ValueError:
+                self.log("忽略无效用量消息", "[WARN]")
+            return True
+        if line.startswith("[ASK] "):
+            try:
+                self.emit("ask", json.loads(line[len("[ASK] "):]))
+            except ValueError:
+                self.answer(False)
+            return True
         if not line.startswith("[ARTIFACT] "):
             return False
         try:
             data = json.loads(line[len("[ARTIFACT] "):])
+            if self.usage and data.get("kind") == "document":
+                data["usage"] = self.usage
             self.emit("artifact", {**data, "chapter": chapter})
         except (ValueError, TypeError):
             self.log("忽略无效产物消息", "[WARN]")
+        return True
+
+    def answer(self, keep):
+        """把用户对重复题的选择写入正在等待的子进程。"""
+        process = self.adapter
+        if process is None or process.poll() is not None:
+            return False
+        try:
+            process.stdin.write("keep\n" if keep else "discard\n")
+            process.stdin.flush()
+        except (OSError, ValueError):
+            return False
+        self.log("已选择保留这份练习" if keep else "已选择放弃这份练习")
         return True
 
     def setup_inline(self, settings):
@@ -215,25 +245,18 @@ class TaskService:
                     references = []
                     budget = 20000 // max(len(textbook_texts), 1)
                     for pdf_path, text in textbook_texts.items():
-                        excerpts = []
-                        remaining = budget
-                        for offset in range(0, len(text), 1000):
-                            chunk = text[offset:offset + 1200]
-                            if any(keyword in chunk for keyword in keywords):
-                                excerpts.append(chunk[:remaining])
-                                remaining -= len(excerpts[-1])
-                                if remaining <= 0:
-                                    break
-                        if excerpts:
-                            references.append(f"--- 来源：{os.path.basename(pdf_path)} ---\n" + "\n".join(excerpts))
+                        # 与课程库共用打分：选关键词最密集的不重叠片段，再按原文顺序排列。
+                        excerpt = textbook_excerpts(text, keywords, budget)
+                        if excerpt:
+                            references.append(f"--- 来源：{os.path.basename(pdf_path)} ---\n" + excerpt)
                     prompt_context = "\n\n".join(references)[:20000]
                     if textbook_texts and not prompt_context:
                         self.log(f"未找到与 {chap} 匹配的教材片段。", "[WARN]")
                     prompt = build_prompt(mode, chap, prompt_context, log=lambda message: self.log(message, "[SOURCE]" if mode == "练习" else "[RULE]"))
                     safe_name = f"{mode}_{chap}".replace("：", "_").replace(" ", "")
-                    cmd = [sys.executable, "-u", AI_ADAPTERS[ai], "", os.path.join(output_dir, safe_name)]
-                    if ai == "GPT (Codex)" and run_mode == "CLI":
-                        cmd.append(model_name)
+                    cmd = [sys.executable, "-u", ADAPTER, "", os.path.join(output_dir, safe_name), "--provider", AI_PROVIDERS[ai]]
+                    if run_mode == "CLI":
+                        cmd.extend(["--cli-model", model_name])
                     cmd.extend(["--pdf-engine", pdf_engine, "--run-mode", run_mode, "--output-format", output_format])
                     adapter_env = env.copy()
                     if run_mode == "API":
@@ -244,10 +267,12 @@ class TaskService:
                         prompt_file = Path(request_dir) / "prompt.txt"
                         prompt_file.write_text(prompt, encoding="utf-8")
                         cmd.extend(["--prompt-file", str(prompt_file)])
+                        self.usage = None
                         with self.popen(
-                            cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                            cmd, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, encoding="utf-8", errors="replace", env=adapter_env, cwd=BASE_DIR,
                         ) as process:
+                            self.adapter = process
                             for line in process.stdout:
                                 progress = parse_progress(line)
                                 if progress:
@@ -257,6 +282,7 @@ class TaskService:
                                 elif not self.artifact_line(line, chap):
                                     self.log(line.rstrip())
                             return_code = process.wait()
+                            self.adapter = None
                     self.emit("module", {"chapter": chap, "status": "failed" if return_code else "succeeded"})
                     if return_code:
                         self.log(f"失败: {chap}（退出码 {return_code}）", "[ERR]")

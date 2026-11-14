@@ -1,4 +1,4 @@
-"""Generate study content with Codex and save the selected document format."""
+"""Generate study content with the selected AI provider and save the chosen document format."""
 
 import argparse
 import json
@@ -9,11 +9,11 @@ import sys
 
 if __package__:
     from .document_export import add_output_arguments, check_output_environment, save_document
-    from .ai_runtime import add_runtime_arguments, generate_content, save_generated_document
+    from .ai_runtime import PROVIDER_NAMES, add_runtime_arguments, generate_content, save_generated_document, usage_line
     from .skill_rules import chapter_from_prompt, order_problem_set, validate_problem_set
 else:
     from document_export import add_output_arguments, check_output_environment, save_document
-    from ai_runtime import add_runtime_arguments, generate_content, save_generated_document
+    from ai_runtime import PROVIDER_NAMES, add_runtime_arguments, generate_content, save_generated_document, usage_line
     from skill_rules import chapter_from_prompt, order_problem_set, validate_problem_set
 
 
@@ -33,20 +33,20 @@ def open_document(document_path):
 
 
 def main(argv=None):
-    parser = argparse.ArgumentParser(description="通过 Codex 生成 Word、PDF、MD 或 HTML。")
+    parser = argparse.ArgumentParser(description="通过 GPT (Codex)、DeepSeek 或豆包生成 Word、PDF、MD 或 HTML。")
     parser.add_argument("prompt", nargs="?", default="测试Prompt", help="发送给 AI 的提示词")
     parser.add_argument("filename_prefix", nargs="?", default="output", help="输出文件前缀（不含扩展名）")
-    parser.add_argument("model_name", nargs="?", default="gpt-6.1-sol", help="Codex 模型名称")
     parser.add_argument("--pdf-engine", choices=("browser", "latex"), default="browser")
     add_output_arguments(parser)
-    add_runtime_arguments(parser, "codex")
+    add_runtime_arguments(parser)
     args = parser.parse_args(argv)
+    provider, name = args.provider, PROVIDER_NAMES[args.provider]
 
     try:
         check_output_environment(args.output_format, args.pdf_engine)
 
-        print(f"[*] 正在通过 Codex 生成: {args.filename_prefix}", flush=True)
-        content = order_problem_set(generate_content("codex", args, BASE_DIR))
+        print(f"[*] 正在通过 {name} 生成: {args.filename_prefix}", flush=True)
+        content = order_problem_set(generate_content(provider, args, BASE_DIR))
         if not content:
             raise ValueError("AI 返回了空内容，未生成文档。")
         if args.task_mode == "practice" or "任务：【练习】" in args.prompt:
@@ -59,7 +59,7 @@ def main(argv=None):
                 raise
 
         print(f"[*] 正在导出 {args.output_format.upper()}...", flush=True)
-        document_file = save_generated_document("codex", args, BASE_DIR, content)
+        document_file = save_generated_document(provider, args, BASE_DIR, content)
     except subprocess.CalledProcessError as error:
         details = error.stderr or error.stdout or str(error)
         print(f"[-] 生成失败: {details.strip()}", file=sys.stderr, flush=True)
@@ -68,6 +68,9 @@ def main(argv=None):
         print(f"[-] 生成失败: {error}", file=sys.stderr, flush=True)
         return 1
 
+    usage = usage_line()
+    if usage:
+        print(usage, flush=True)
     print("[ARTIFACT] " + json.dumps({"path": str(document_file), "kind": "document"}, ensure_ascii=False), flush=True)
     print(f"[+] 文件已保存: {document_file}", flush=True)
     open_document(document_file)

@@ -19,11 +19,11 @@ from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
-from adapters.ai_runtime import API_SETTINGS, RUN_MODES, api_model, list_api_models, validate_api_configuration
+from adapters.ai_runtime import API_SETTINGS, MODELS, RUN_MODES, api_model, list_api_models, validate_api_configuration
 from adapters.skill_rules import MODULE_RULES, SUBJECT_MODULES, batch_chapters
 from launcher.task_service import AI_PROVIDERS, BASE_DIR, SUBJECTS, TaskService
 
-DEFAULTS = {"subject": SUBJECTS[0], "ai": "GPT (Codex)", "run_mode": "CLI", "model": "gpt-6.1-sol", "mode": "总结知识点", "chapter": next(iter(MODULE_RULES)), "output_format": "pdf", "pdf_engine": "browser"}
+DEFAULTS = {"subject": SUBJECTS[0], "ai": "GPT (Codex)", "run_mode": "CLI", "model": MODELS["cli"][0], "mode": "总结知识点", "chapter": next(iter(MODULE_RULES)), "output_format": "pdf", "pdf_engine": "browser"}
 TERMINAL = {"succeeded", "partial", "failed"}
 
 class Settings(BaseModel):
@@ -31,7 +31,7 @@ class Settings(BaseModel):
     subject: str = DEFAULTS["subject"]
     ai: str = DEFAULTS["ai"]
     run_mode: str = "CLI"
-    model: str = Field(default="gpt-6.1-sol", max_length=300)
+    model: str = Field(default=MODELS["cli"][0], max_length=300)
     mode: str = "总结知识点"
     chapter: str = DEFAULTS["chapter"]
     output_format: str = "pdf"
@@ -44,6 +44,9 @@ class Submission(BaseModel):
 
 class OpenArtifact(BaseModel):
     folder: bool = False
+
+class Answer(BaseModel):
+    keep: bool
 
 class Manager:
     def __init__(self, service_factory=TaskService, event_limit=500):
@@ -107,7 +110,7 @@ class Manager:
     def snapshot(self, job_id):
         with self.lock:
             job = self.jobs[job_id]
-            return self.redact({key: copy.deepcopy(value) for key, value in job.items() if key != "events"})
+            return self.redact({key: copy.deepcopy(value) for key, value in job.items() if key not in ("events", "service")})
 
     def emit(self, job_id, kind, data):
         with self.lock:
@@ -124,6 +127,9 @@ class Manager:
                 job["modules"][data["chapter"]] = data["status"]
                 job["successes"] = list(job["modules"].values()).count("succeeded")
                 job["failures"] = list(job["modules"].values()).count("failed")
+            elif kind == "ask":
+                job["question"] = {"chapter": str(data.get("chapter", "")), "count": int(data.get("count", 0))}
+                data = job["question"]
             elif kind == "artifact":
                 path = Path(data["path"]).resolve()
                 roots = [Path(BASE_DIR, "output").resolve(), Path(BASE_DIR, "local_problems").resolve()]
@@ -131,7 +137,9 @@ class Manager:
                     return
                 artifact_id = uuid.uuid4().hex
                 self.artifacts[artifact_id] = path
-                data = {"id": artifact_id, "name": path.name, "kind": data.get("kind", "document"), "chapter": data.get("chapter", "")}
+                usage = data.get("usage")
+                usage = {key: int(usage.get(key, 0)) for key in ("input", "output", "calls")} if isinstance(usage, dict) else None
+                data = {"id": artifact_id, "name": path.name, "kind": data.get("kind", "document"), "chapter": data.get("chapter", ""), "usage": usage}
                 data = self.redact(data)
                 job["artifacts"].append(data)
             job["sequence"] += 1
@@ -150,7 +158,7 @@ class Manager:
                 raise HTTPException(409, "已有任务正在执行")
             job_id = uuid.uuid4().hex
             chapters = (batch_chapters(settings["subject"], settings["mode"]) if settings["chapter"] == "all" else [settings["chapter"]]) if kind == "generate" else []
-            self.jobs[job_id] = {"id": job_id, "kind": kind, "status": "waiting", "percent": 0, "stage": "等待执行", "successes": 0, "failures": 0, "modules": {chapter: "waiting" for chapter in chapters}, "logs": [], "artifacts": [], "sequence": 0, "events": deque(maxlen=self.event_limit)}
+            self.jobs[job_id] = {"id": job_id, "kind": kind, "status": "waiting", "percent": 0, "stage": "等待执行", "successes": 0, "failures": 0, "modules": {chapter: "waiting" for chapter in chapters}, "logs": [], "artifacts": [], "question": None, "sequence": 0, "events": deque(maxlen=self.event_limit)}
             self.current = job_id
             thread = threading.Thread(target=self.run, args=(job_id, kind, copy.deepcopy(settings)), daemon=True)
             self.threads.append(thread)
@@ -166,6 +174,8 @@ class Manager:
             self.services.append(service)
             self.jobs[job_id]["status"] = "running"
         try:
+            with self.lock:
+                self.jobs[job_id]["service"] = service
             successes, total = service.execute(settings, kind)
             status = "succeeded" if successes == total else "partial" if successes else "failed"
             with self.lock:
@@ -181,9 +191,24 @@ class Manager:
                 for chapter, state in job["modules"].items():
                     if state in ("waiting", "running"):
                         job["modules"][chapter] = "failed"
+                job.pop("service", None)
+                job["question"] = None
                 job["stage"] = {"succeeded": "全部完成", "partial": "任务结束，存在失败项", "failed": "任务失败，请查看详细日志"}[job["status"]]
                 self.services.remove(service)
             self.emit(job_id, "finished", {})
+
+    def answer(self, job_id, keep):
+        with self.lock:
+            job = self.jobs[job_id]
+            service = job.get("service")
+            if not job["question"] or service is None:
+                raise HTTPException(409, "当前没有待回答的问题")
+            job["question"] = None
+            job["sequence"] += 1
+            job["events"].append({"id": job["sequence"], "kind": "ask", "data": None})
+        if not service.answer(keep):
+            raise HTTPException(409, "任务已结束，无法回答")
+        return self.snapshot(job_id)
 
     def replay(self, job_id, cursor):
         with self.lock:
@@ -260,7 +285,7 @@ def create_app(port, token=None, manager=None, dist=None):
         if not authorized:
             raise HTTPException(401, "请使用启动器打印的地址打开工作台")
         if not (dist / "index.html").is_file():
-            return HTMLResponse("前端尚未构建。请运行 npm --prefix frontend ci 和 npm --prefix frontend run build，或 python main.py --legacy-ui", status_code=503)
+            return HTMLResponse("前端尚未构建。请运行 npm --prefix frontend ci 和 npm --prefix frontend run build", status_code=503)
         response = HTMLResponse((dist / "index.html").read_text(encoding="utf-8"))
         response.set_cookie("math_session", token, httponly=True, samesite="strict")
         return response
@@ -269,7 +294,7 @@ def create_app(port, token=None, manager=None, dist=None):
     def options():
         with manager.lock:
             configured = {ai: bool(manager.credentials.get(provider) or os.environ.get(API_SETTINGS[provider][0])) for ai, provider in AI_PROVIDERS.items()}
-        return {"subjects": list(SUBJECTS), "providers": {ai: list(RUN_MODES[provider]) for ai, provider in AI_PROVIDERS.items()}, "modules": list(MODULE_RULES), "subject_modules": {subject: list(modules) for subject, modules in SUBJECT_MODULES.items()}, "batch_counts": {subject: {mode: len(batch_chapters(subject, mode)) for mode in ("总结知识点", "练习")} for subject in SUBJECTS}, "defaults": DEFAULTS, "api_defaults": {ai: (os.environ.get("OPENAI_MODEL", "") if provider == "codex" else api_model(provider)) for ai, provider in AI_PROVIDERS.items()}, "configured": configured, "cli_models": ["gpt-6.1-sol", "gpt-6-astra", "gpt-6-sol", "gpt-5.2"]}
+        return {"subjects": list(SUBJECTS), "providers": {ai: list(RUN_MODES[provider]) for ai, provider in AI_PROVIDERS.items()}, "modules": list(MODULE_RULES), "subject_modules": {subject: list(modules) for subject, modules in SUBJECT_MODULES.items()}, "batch_counts": {subject: {mode: len(batch_chapters(subject, mode)) for mode in ("总结知识点", "练习")} for subject in SUBJECTS}, "defaults": DEFAULTS, "api_defaults": {ai: (os.environ.get("OPENAI_MODEL", "") if provider == "codex" else api_model(provider)) for ai, provider in AI_PROVIDERS.items()}, "configured": configured, "cli_models": MODELS["cli"]}
 
     @app.put("/api/session/settings")
     def settings(raw: Settings):
@@ -299,6 +324,12 @@ def create_app(port, token=None, manager=None, dist=None):
         if job_id not in manager.jobs:
             raise HTTPException(404, "任务不存在")
         return manager.snapshot(job_id)
+
+    @app.post("/api/jobs/{job_id}/answer")
+    def answer(job_id: str, raw: Answer):
+        if job_id not in manager.jobs:
+            raise HTTPException(404, "任务不存在")
+        return manager.answer(job_id, raw.keep)
 
     @app.get("/api/jobs/{job_id}/events")
     async def events(job_id: str, request: Request):

@@ -11,7 +11,6 @@ import webbrowser
 
 def main():
     parser = argparse.ArgumentParser(description="Course_Skill 课程复习工作台")
-    parser.add_argument("--legacy-ui", action="store_true", help="启动旧版 Tkinter 界面")
     parser.add_argument("--no-browser", action="store_true", help="仅启动服务")
     args = parser.parse_args()
     base = Path(__file__).resolve().parent
@@ -20,10 +19,8 @@ def main():
     local_python = environment / ("Scripts/python.exe" if sys.platform == "win32" else "bin/python")
     if local_python.is_file() and Path(sys.prefix).resolve() != environment.resolve():
         return subprocess.call([str(local_python), "-u", str(base / "main.py"), *sys.argv[1:]], cwd=base)
-    if args.legacy_ui:
-        return subprocess.call([sys.executable, "-u", str(base / "launcher" / "app.py")], cwd=base)
     if not (base / "frontend" / "dist" / "index.html").is_file():
-        print("前端尚未构建。请先运行：\n  npm --prefix frontend ci\n  npm --prefix frontend run build\n也可运行 python main.py --legacy-ui 使用旧版界面。")
+        print("前端尚未构建。请先运行：\n  npm --prefix frontend ci\n  npm --prefix frontend run build")
         return 1
     try:
         import uvicorn

@@ -1,6 +1,6 @@
 # Local web service and helpers for PDF text extraction / GPT GUI automation.
 # The app's one-click setup installs these only as needed.
-# Tkinter (legacy UI only) and system tools (browser, Pandoc, XeLaTeX, Codex CLI) are not pip packages.
+# System tools (browser, Pandoc, XeLaTeX, Codex CLI) are not pip packages.
 PyMuPDF>=1.24.3,<2
 playwright>=1.45,<2
 

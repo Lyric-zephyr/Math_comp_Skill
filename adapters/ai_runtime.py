@@ -17,12 +17,16 @@ else:
     from task_progress import report_progress
 
 
+MODELS = json.loads((Path(__file__).resolve().parent.parent / "models.json").read_text(encoding="utf-8"))
 API_SETTINGS = {
-    "codex": ("OPENAI_API_KEY", "OPENAI_BASE_URL", "https://api.openai.com/v1", "OPENAI_MODEL", "gpt-5.2"),
-    "dsh": ("DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "https://api.deepseek.com", "DEEPSEEK_MODEL", "deepseek-flash"),
-    "doubao": ("ARK_API_KEY", "ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3", "ARK_MODEL", "doubao-seed-2-1-pro-260915"),
+    "codex": ("OPENAI_API_KEY", "OPENAI_BASE_URL", "https://api.openai.com/v1", "OPENAI_MODEL", MODELS["api"]["codex"]),
+    "dsh": ("DEEPSEEK_API_KEY", "DEEPSEEK_BASE_URL", "https://api.deepseek.com", "DEEPSEEK_MODEL", MODELS["api"]["dsh"]),
+    "doubao": ("ARK_API_KEY", "ARK_BASE_URL", "https://ark.cn-beijing.volces.com/api/v3", "ARK_MODEL", MODELS["api"]["doubao"]),
 }
 RUN_MODES = {"codex": ("GUI", "CLI", "API"), "dsh": ("API",), "doubao": ("API",)}
+PROVIDER_NAMES = {"codex": "Codex", "dsh": "DeepSeek (DSH)", "doubao": "豆包"}
+# 本进程内所有 API 调用的 token 累计，随生成结果一起报告。
+USAGE = {"input": 0, "output": 0, "calls": 0}
 
 
 def api_model(provider):
@@ -78,14 +82,24 @@ def list_api_models(provider, key, timeout=15):
     return models
 
 
-def add_runtime_arguments(parser, provider):
-    defaults = {"codex": "CLI", "dsh": "API", "doubao": "API"}
-    parser.add_argument("--run-mode", choices=RUN_MODES[provider], default=defaults[provider])
+def add_runtime_arguments(parser):
+    parser.add_argument("--provider", choices=tuple(API_SETTINGS), required=True, help="codex、dsh（DeepSeek）或 doubao（豆包）")
+    parser.add_argument("--run-mode", choices=("GUI", "CLI", "API"), help="默认：codex 为 CLI，其余为 API")
     parser.add_argument("--api-model", help="API 模型 ID；豆包也可填写推理接入点 ID")
+    parser.add_argument("--cli-model", default=MODELS["cli"][0], help="Codex CLI 模型名称")
     parser.add_argument("--timeout", type=int, default=1200, help="等待 AI 完成的最长秒数")
     parser.add_argument("--prompt-file", type=Path, help="读取 UTF-8 提示词文件，避免命令行长度限制")
     parser.add_argument("--task-mode", choices=("summary", "practice"), help="为直接运行适配器加载对应 skill 规则")
     parser.add_argument("--chapter", choices=tuple(ALL_MODULE_RULES), help="与 --task-mode 一起指定模块")
+
+
+def _record_usage(usage):
+    if not isinstance(usage, dict):
+        return
+    USAGE["calls"] += 1
+    for key, names in (("input", ("input_tokens", "prompt_tokens")), ("output", ("output_tokens", "completion_tokens"))):
+        value = next((usage[name] for name in names if isinstance(usage.get(name), int)), 0)
+        USAGE[key] += value
 
 
 def _message_text(content):
@@ -128,6 +142,7 @@ def generate_api(provider, prompt, model=None, timeout=1200):
 
     if not isinstance(result, dict):
         raise ValueError("API 返回格式异常：预期为 JSON 对象。")
+    _record_usage(result.get("usage"))
     if result.get("error"):
         raise RuntimeError(f"API 返回错误：{str(result['error']).replace(key, '[已隐藏]')}")
     if provider == "codex":
@@ -157,6 +172,8 @@ def generate_api(provider, prompt, model=None, timeout=1200):
 def generate_content(provider, args, base_dir):
     if getattr(args, "prompt_file", None):
         args.prompt = args.prompt_file.read_text(encoding="utf-8-sig")
+    if args.run_mode is None:
+        args.run_mode = "CLI" if provider == "codex" else "API"
     if args.run_mode not in RUN_MODES[provider]:
         raise ValueError("该平台不支持所选运行方式。")
     if args.timeout <= 0:
@@ -179,9 +196,9 @@ def generate_content(provider, args, base_dir):
     practice = args.task_mode == "practice" or (not args.task_mode and "任务：【练习】" in args.prompt[:512])
     if practice:
         if __package__:
-            from .practice_history import generate_practice
+            from .practice_history import ask_user, generate_practice
         else:
-            from practice_history import generate_practice
+            from practice_history import ask_user, generate_practice
         chapter = args.chapter
         if not chapter:
             match = re.search(r"章节：【([^】]+)】", args.prompt[:512])
@@ -190,7 +207,7 @@ def generate_content(provider, args, base_dir):
             raise ValueError("练习避重需要有效模块；直接调用请同时提供 --task-mode practice 和 --chapter。")
         return generate_practice(chapter, args.prompt,
                                  lambda prompt: _generate_once(provider, args, base_dir, prompt),
-                                 directory=Path(base_dir) / "local_practice")
+                                 directory=Path(base_dir) / "local_practice", ask=ask_user)
     content = _generate_once(provider, args, base_dir, args.prompt)
     report_progress(85, "正文生成完成")
     return content
@@ -217,17 +234,14 @@ def _generate_summary(chapter, prompt, generate, progress=None):
             body = _generate_summary(current, build_prompt("总结知识点", current, context), generate, progress)
             body = re.sub(r"(?m)^(#{2,5})(?=\s)", r"#\1", body)
             parts.append(f"## {current}\n\n{body}")
-        parts.append(_generate_summary_part(prompt, "跨模块联系与方法选择", generate,
-                     "仅写前述模块之间的新联系及方法选择，不重列定义、公式或易错清单。"))
+        parts.append(_generate_summary_part(prompt, "跨模块联系与方法选择", generate))
         progress("跨模块联系")
         return "\n\n".join(parts) + "\n"
 
     parts, covered = [], []
     for topics in SUMMARY_TOPICS[chapter]:
         print(f"[*] 知识点总结：{chapter} / {topics}", flush=True)
-        instruction = (f"本轮只覆盖这些互相关联的主题：{topics}。定义、公式、定理、条件、方法就地整合，"
-                       "不另写基础/核心/拓展重复部分，不输出易错总结。"
-                       "使用 ### 编号小标题和简短自然段，不用圆点列表。"
+        instruction = (f"本轮只覆盖这些互相关联的主题：{topics}。不输出易错总结。"
                        "前轮已完成的主题如下，不得重述；需要衔接只作简短指代：\n" + "\n".join(covered))
         body = _generate_summary_part(prompt, "一、知识梳理", generate, instruction)
         parts.append(re.sub(r"\A##[^\n]*\n+", "", body))
@@ -243,26 +257,13 @@ def _generate_summary(chapter, prompt, generate, progress=None):
 
     body = re.sub(r"(?m)^###[ \t]+(?:\d+[.、．][ \t]*)?(.+)$", renumber, "\n\n".join(parts))
     errors = _generate_summary_part(prompt, "二、易错总结", generate,
-                "仅输出本模块 7–10 条易错提醒；每条为独立普通段落，格式为 1.标题：正文，编号从1开始。"
-                "条目不用小标题，标题与正文均不加粗。"
-                "不重新展开定义或整套公式。已覆盖主题：\n" + "\n".join(covered))
+                "仅输出本模块 7–10 条易错提醒。已覆盖主题：\n" + "\n".join(covered))
     progress("易错总结")
     return f"## 一、知识梳理\n\n{body}\n\n{errors}\n"
 
 
 def _generate_summary_part(prompt, heading, generate, scope=""):
-    emphasis_rule = ("易错条目使用普通编号段落，标题和正文均不加粗，不使用小标题。"
-                     if heading == "二、易错总结" else
-                     "每个主要知识小节通常用 **...** 标出1处关键术语或适用条件，极短或纯公式小节可不标；重点须清晰可辨，不连续加粗多个句子或整段。")
-    instruction = (f"\n\n【分段执行】本轮仅输出 `## {heading}` 及其内容，不输出总标题、目录或其他大节。"
-                   "第一原则全面，第二原则简洁突出重点。保留定义、条件和重要结论，删去铺垫、过渡、泛泛评价与显然步骤。"
-                   "每个知识点、公式和方法只完整表述一次，跨小节仅简短指代；输出前合并同义内容，易错只写误用与纠正。"
-                   "合并等价公式与非必要中间式，不用文字复述公式。重点公式就地用\\boxed，"
-                   f"{emphasis_rule}"
-                   "优先正面写出条件与结论，减少反复使用不等于、不能判定、不意味着等表述，保留必要的数学不等式和反例。"
-                   "并列出现多个公式时，先单独写文字标签，再逐条另起独立公式行，每行整体对准正文版心，"
-                   "不用aligned或array把公式清单排成左对齐块；每行1–2个，同行两式之间由模板加逗号，长式单独一行；"
-                   "公式用$$居中并空行分隔，超宽用aligned断行，禁止缩小字号或把多条公式塞进行内正文。正文首行缩进由模板处理。\n" + scope)
+    instruction = f"\n\n【分段执行】本轮仅输出 `## {heading}` 及其内容，不输出总标题、目录或其他大节。\n" + scope
     for attempt in range(2):
         try:
             body = generate(prompt + instruction).strip()
@@ -335,6 +336,11 @@ def save_generated_document(provider, args, base_dir, content):
     return document
 
 
+def usage_line():
+    """供启动器解析的 token 用量；非 API 方式没有用量数据。"""
+    return "[USAGE] " + json.dumps(USAGE) if USAGE["calls"] else None
+
+
 def _generate_once(provider, args, base_dir, prompt):
     if args.run_mode == "API":
         return generate_api(provider, prompt, args.api_model, args.timeout)
@@ -348,7 +354,7 @@ def _generate_once(provider, args, base_dir, prompt):
     backend = shutil.which("codex")
     if not backend:
         raise FileNotFoundError("找不到 codex 命令，请先安装并登录 Codex CLI。")
-    command = [backend, "exec", "--model", args.model_name, "--sandbox", "read-only", "--skip-git-repo-check", "-"]
+    command = [backend, "exec", "--model", args.cli_model, "--sandbox", "read-only", "--skip-git-repo-check", "-"]
     result = subprocess.run(
         command, input=prompt, cwd=Path(base_dir), capture_output=True, text=True,
         encoding="utf-8", errors="replace", timeout=args.timeout, check=True,

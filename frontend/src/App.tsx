@@ -27,6 +27,7 @@ export default function App() {
   const [logsOpen, setLogsOpen] = useState(false)
   const [sheetOpen, setSheetOpen] = useState(false)
   const [connection, setConnection] = useState('')
+  const [answering, setAnswering] = useState(false)
   const requestVersion = useRef(0)
   const modelMemory = useRef<Record<string, string>>({})
   const modeMemory = useRef<Record<string, string>>({})
@@ -73,7 +74,7 @@ export default function App() {
     }
     const snapshot = (event: MessageEvent) => { const next = JSON.parse(event.data) as Job; setJob(next); setConnection(''); if (terminal(next)) source.close() }
     source.addEventListener('snapshot', snapshot)
-    for (const kind of ['progress', 'module', 'artifact', 'log', 'finished']) source.addEventListener(kind, refresh)
+    for (const kind of ['progress', 'module', 'artifact', 'log', 'ask', 'finished']) source.addEventListener(kind, refresh)
     source.onopen = () => { setConnection(''); void refresh() }
     source.onerror = () => { setConnection('连接暂时中断，正在恢复…'); void refresh() }
     const poll = window.setInterval(refresh, 3000)
@@ -134,6 +135,13 @@ export default function App() {
     } catch (e) { if (version === requestVersion.current) setError(`${(e as Error).message}；仍可手动输入模型 ID。`) }
     finally { if (version === requestVersion.current) setReading(false) }
   }
+  const answer = async (keep: boolean) => {
+    if (!job) return
+    setAnswering(true); setError('')
+    try { setJob(await api<Job>(`jobs/${job.id}/answer`, { keep })) }
+    catch (e) { setError((e as Error).message) }
+    finally { setAnswering(false) }
+  }
   const open = async (path: string, body = {}) => {
     setError(''); setOpenedPath('')
     try { const result = await api<{path: string}>(path, body); setOpenedPath(result.path) }
@@ -185,10 +193,15 @@ export default function App() {
             <div className="flex items-center justify-between gap-3"><h2 id="progress-title" className="flex items-center gap-2 text-xl font-semibold sm:text-2xl"><Gauge size={22} className="shrink-0 text-blue-600" aria-hidden="true"/>任务进度</h2><span className={`rounded-full px-2.5 py-1 text-xs ${job?.status === 'failed' || job?.status === 'partial' ? 'bg-amber-50 text-amber-700' : 'bg-slate-100 text-slate-500'}`}>{job ? names[job.status] : '准备就绪'}</span></div>
             {!job ? <div className="flex min-h-64 flex-1 flex-col items-center justify-center px-4 text-center"><div className="mb-5 flex size-16 items-center justify-center rounded-2xl border border-blue-100 bg-blue-50 text-blue-500"><BookOpen size={27} strokeWidth={1.5}/></div><h3 className="font-medium text-slate-700">为下一次进步，做好准备</h3><p className="mt-2 text-sm leading-6 text-slate-400">选择左侧任务后开始生成，<br/>进度和学习文件会显示在这里。</p></div> : <div className="mt-7"><div className="mb-3 flex items-center justify-between gap-3"><p className="text-sm text-slate-600" role="status">{job.stage}</p><span className="text-xl font-semibold tabular-nums text-blue-600">{Math.round(job.percent)}<span className="ml-0.5 text-sm">%</span></span></div><div role="progressbar" aria-label="整体进度" aria-valuenow={job.percent} aria-valuemin={0} aria-valuemax={100} className="h-2 overflow-hidden rounded-full bg-slate-100"><div style={{ width: `${job.percent}%` }} className="h-full rounded-full bg-blue-600 transition-[width]"/></div><p className="hint mt-3">阶段进度会在实际步骤完成后更新；刷新或关闭网页不影响执行。</p>
               <div className="mt-5 space-y-3">{Object.entries(job.modules).map(([chapter, status]) => <div key={chapter} className="flex items-start gap-2 text-sm">{status === 'succeeded' ? <CheckCircle2 size={17} className="mt-0.5 shrink-0 text-emerald-600"/> : status === 'failed' ? <XCircle size={17} className="mt-0.5 shrink-0 text-red-500"/> : status === 'running' ? <LoaderCircle size={17} className="mt-0.5 shrink-0 animate-spin text-blue-600"/> : <Circle size={17} className="mt-0.5 shrink-0 text-slate-300"/>}<span className="min-w-0 flex-1 text-slate-600">{chapter}</span><span className="shrink-0 text-xs leading-5 text-slate-400">{names[status]}</span></div>)}</div>
+              {job.question && <div role="alertdialog" aria-labelledby="ask-title" aria-describedby="ask-body" className="mt-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm">
+                <p id="ask-title" className="font-medium text-amber-800">发现重复题</p>
+                <p id="ask-body" className="mt-1 leading-6 text-amber-800">{job.question.chapter} 重试三轮后仍有 {job.question.count} 道题与历史题目重复或高度相似。要保留这份练习吗？</p>
+                <div className="mt-3 flex gap-2"><Button size="sm" disabled={answering} className="bg-emerald-600 hover:bg-emerald-700" onClick={() => void answer(true)}>保留</Button><Button size="sm" disabled={answering} className="bg-red-600 hover:bg-red-700" onClick={() => void answer(false)}>放弃</Button></div>
+              </div>}
               {terminal(job) && <div className="mt-5 border-t border-slate-100 pt-4 text-sm text-slate-500">成功 <strong className="font-medium text-emerald-600">{job.successes}</strong> 项<span className="mx-3 text-slate-200">/</span>失败 <strong className={job.failures ? 'font-medium text-red-600' : 'font-medium'}>{job.failures}</strong> 项</div>}
             </div>}
             {connection && <p role="status" className="hint mt-3 text-amber-700">{connection}</p>}
-            {!!job?.artifacts.length && <div className="mt-5 space-y-3 border-t border-slate-100 pt-5"><h3 className="text-xs font-semibold text-slate-500">学习文件</h3>{job.artifacts.map(file => <div key={file.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5"><div className="flex items-start gap-2"><FileText size={18} className="mt-0.5 shrink-0 text-blue-500"/><div className="min-w-0"><p className="break-all text-sm font-medium">{file.name}</p>{file.kind === 'recovery' && <p className="mt-1 text-xs text-amber-700">导出未完成，原始 Markdown 已保留</p>}</div></div><div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => void open(`artifacts/${file.id}/open`)}>打开文件</Button><Button variant="ghost" size="sm" onClick={() => void open(`artifacts/${file.id}/open`, { folder: true })}><FolderOpen/>所在文件夹</Button></div></div>)}</div>}
+            {!!job?.artifacts.length && <div className="mt-5 space-y-3 border-t border-slate-100 pt-5"><h3 className="text-xs font-semibold text-slate-500">学习文件</h3>{job.artifacts.map(file => <div key={file.id} className="rounded-xl border border-slate-200 bg-slate-50/50 p-3.5"><div className="flex items-start gap-2"><FileText size={18} className="mt-0.5 shrink-0 text-blue-500"/><div className="min-w-0"><p className="break-all text-sm font-medium">{file.name}</p>{file.kind === 'recovery' && <p className="mt-1 text-xs text-amber-700">导出未完成，原始 Markdown 已保留</p>}{file.usage && <p className="mt-1 text-xs text-violet-600">API 用量：输入 {file.usage.input.toLocaleString()} · 输出 {file.usage.output.toLocaleString()} tokens（{file.usage.calls} 次调用）</p>}</div></div><div className="mt-3 flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => void open(`artifacts/${file.id}/open`)}>打开文件</Button><Button variant="ghost" size="sm" onClick={() => void open(`artifacts/${file.id}/open`, { folder: true })}><FolderOpen/>所在文件夹</Button></div></div>)}</div>}
             {job && <details open={logsOpen} onToggle={event => setLogsOpen(event.currentTarget.open)} className="mt-5 border-t border-slate-100 pt-4"><summary className="flex list-none items-center justify-between text-xs font-medium text-slate-500">详细日志<span className="flex items-center gap-2">{job.logs.length} 条<ChevronDown size={14}/></span></summary><div className="mt-3 max-h-64 overflow-auto px-1 py-2 font-mono text-xs leading-6 text-emerald-700" tabIndex={0} aria-label="任务日志">{job.logs.map((line, i) => <div key={i} className={`whitespace-pre-wrap break-all ${line.includes('[ERR]') || line.includes('[-]') ? 'text-red-600' : line.includes('[WARN]') || line.includes('[!]') ? 'text-amber-700' : ''}`}>{line}</div>)}<div ref={logEnd}/></div></details>}
           </section>
           <section className="card p-5"><h2 className="mb-3 text-xs font-semibold text-slate-500">文件与参考资料</h2><div className="flex flex-wrap gap-2"><Button variant="outline" size="sm" onClick={() => void open('resources/textbook/open')}><FolderOpen/>教材文件夹</Button><Button variant="outline" size="sm" onClick={() => void open('resources/output/open')}><FolderOpen/>输出文件夹</Button></div><p className="hint mt-3">{practice ? (competition ? '优先改编 Assistant_course 对应习题库，缺少资料再读取真题与开放参考。' : '优先改编 Assistant_course 复变习题，缺少资料时参考 MIT OCW。') : '优先读取用户 PDF，再参考 Assistant_course 对应课程库，不足部分由 AI 知识补齐。'}</p><div className="mt-4 flex items-start gap-2 border-t border-slate-100 pt-4 text-xs leading-6 text-slate-400"><ShieldCheck size={15} className="mt-1 shrink-0"/><p>文件和教材保存在本机。生成时相关内容会发送至所选 AI 服务；AI 生成的数学内容请复核后使用。</p></div></section>

@@ -5,8 +5,7 @@ requests are welcome. Please keep discussions respectful and changes focused.
 
 ## Local development
 
-Use Python 3.10+ and Node.js 22+ for frontend development. Tkinter is optional
-and required only for `python main.py --legacy-ui`. From the project root:
+Use Python 3.10+ and Node.js 22+ for frontend development. From the project root:
 
 ```sh
 python -m venv .venv
